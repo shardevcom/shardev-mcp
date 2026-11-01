@@ -6,7 +6,7 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 
 ## Ya disponible
 
-`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `ops_env_check` (ENV-01: validación local de un entorno, sin AWS; `root` opcional en `projects.yaml`), `shardev ops status|services|tasks|logs|env-check|log-read`, `project_*` y `app_*`.
+`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `ops_env_check` (ENV-01: validación local de un entorno, sin AWS; `root` opcional en `projects.yaml`), `ops_ci_check` y `ops_ci_generate` (CI-01: workflows de despliegue desde una plantilla del proyecto; en producción el MCP no escribe), `shardev ops status|services|tasks|logs|env-check|ci-check|ci-generate|log-read`, `project_*` y `app_*`.
 
 ## 1. Ajustes a lo existente
 
@@ -34,7 +34,6 @@ Requisito de todas las operaciones que modifican AWS.
 | ENV-02 | Crear un entorno a partir de otro | T2 | Genera contraseñas nuevas; rechaza producción como destino | Medio |
 | ENV-03 | Dividir un `.env` en configuración y secretos | T2 | Con copia de seguridad | Bajo |
 | ENV-04 | Adoptar o crear un perfil AWS | T2 | Nunca borra una credencial que no se haya guardado antes | Medio |
-| CI-01 | Generar workflows de despliegue y detectar diferencias | T0/T2 | Incluye plantillas | Medio |
 | CI-02 | Comparar y aplicar variables del entorno de GitHub | T1/T2 | Los secretos solo se comprueban por nombre | Medio |
 | SVC-01 | Forzar un despliegue nuevo de los servicios | T3 | Primera candidata para BASE-01 | Bajo |
 | SVC-02 | Cambiar `desired-count` (levantar y apagar) | T3 | Apagar deja el entorno fuera de línea | Bajo |
@@ -60,11 +59,11 @@ Requisito de todas las operaciones que modifican AWS.
 | MAIL-01 | Configurar SES y SNS | T3 | Simulación por defecto | Medio |
 | MAIL-02 | Configurar correo entrante y DMARC | T3 | Simulación por defecto; nunca sobrescribir el MX raíz sin confirmación | Medio |
 | UI-01 | `ui_status`, `ui_plan`, `ui_apply` para componentes shadcn/ui por app | T0/T2 | Sin sobrescribir componentes personalizados | Medio |
-| TPL-01 | Plantillas de despliegue para proyectos generados | T2 | Hoy no incluyen `.aws`, CI ni scripts de despliegue | Alto |
+| TPL-01 | Plantillas de despliegue para proyectos generados | T2 | Hoy no incluyen `.aws`, CI ni scripts de despliegue. Incluye la plantilla de workflow por defecto (`.github/templates/deploy.template.yml`): CI-01 solo renderiza la que aporta el proyecto y no trae ninguna | Alto |
 
 ## Orden recomendado
 
-1. ADJ-01 y ADJ-02, y CI-01.
+1. ADJ-01 y ADJ-02.
 2. BASE-01, BASE-02 y SVC-01 como primera operación que cambia AWS; luego SVC-02.
 3. Resto de ENV y CI, LOC y REL.
 4. SEC, DEP y TPL-01.

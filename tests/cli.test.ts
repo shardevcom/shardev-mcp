@@ -194,5 +194,7 @@ describe("shardev ops env-check", () => {
     expect(text).not.toContain("distintivo");
     await expect(runOps(["env-check", "--project", "demo"], io().io, ctx)).rejects.toThrow(/Falta --env/);
     expect(USAGE).toContain("ops env-check");
+    expect(USAGE).toContain("ops ci-check");
+    expect(USAGE).toContain("ops ci-generate");
   });
 });

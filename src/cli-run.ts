@@ -8,6 +8,7 @@ import { logRead } from "./ops/log-read.js";
 import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsLogs } from "./ops/logs.js";
 import { opsEnvCheck } from "./ops/env-check.js";
+import { opsCiCheck, opsCiGenerate } from "./ops/ci.js";
 import { opsStatus } from "./ops/status.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 
@@ -29,6 +30,8 @@ Uso:
   ${CLI_NAME} ops tasks --project <nombre> --env <entorno> --service <servicio> [--status RUNNING|STOPPED] [--json]
   ${CLI_NAME} ops logs --project <nombre> --env <entorno> --service <servicio> [--since-minutes <1-1440>] [--filter <texto>] [--limit <1-1000>] [--json]
   ${CLI_NAME} ops env-check --project <nombre> --env <entorno> [--json]
+  ${CLI_NAME} ops ci-check --project <nombre> --env <entorno> [--branch <rama>] [--mobile|--no-mobile] [--json]
+  ${CLI_NAME} ops ci-generate --project <nombre> --env <entorno> [--branch <rama>] [--mobile|--no-mobile] [--json]
   ${CLI_NAME} ops log-read --ref <log_ref> [--grep <texto>] [--context <0-5>] [--offset <n>] [--limit <1-500>] [--json]
   ${CLI_NAME} --version | --help
 
@@ -42,6 +45,11 @@ servicios deben estar declarados en \`services\` del entorno en ops.yaml. ops lo
 redactado y muestra el log_ref para leerlo con \`ops log-read --ref <log_ref>\` (o la herramienta MCP log_read).
 ops env-check usa la misma función que la herramienta ops_env_check: valida sin conexión .aws/env/<entorno>/ y env.schema
 (nunca imprime valores; sale con 1 si algún check falla, los avisos no fallan).
+ops ci-check|ci-generate usan las mismas funciones que ops_ci_check y ops_ci_generate: renderizan
+.github/templates/deploy.template.yml del proyecto en .github/workflows/deploy-<entorno>.yml. ci-check no escribe (sale con 1 si no
+está al día; se ignora la cabecera generada). ci-generate escribe de forma atómica, también en producción (a diferencia de la
+herramienta MCP); no hace commit ni push: revisa y versiona el archivo. Sin --branch ni --mobile/--no-mobile se reutilizan las
+opciones guardadas en el workflow actual (línea "# Opciones:").
 ops log-read no necesita --project ni --env: lee solo por referencia y marca el contenido como dato no confiable.
 Con --json la salida es exactamente el JSON de la herramienta; el código de salida es 1 si falla.
 `;
@@ -57,7 +65,7 @@ interface Parsed {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit", "detail", "ref", "grep", "context", "offset"]);
+const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit", "detail", "ref", "grep", "context", "offset", "branch"]);
 
 function parseArgs(argv: string[]): Parsed {
   const positional: string[] = [];
@@ -189,7 +197,7 @@ function strFlag(p: Parsed, name: string): string | undefined {
 
 /** Salida humana breve de las lecturas AWS; con --json se imprime el JSON de la herramienta tal cual. */
 function humanOps(cmd: string, o: ToolOutcome): string {
-  if (o.isError && cmd !== "env-check") return o.text;
+  if (o.isError && cmd !== "env-check" && cmd !== "ci-check") return o.text;
   let j: Record<string, unknown>;
   try {
     j = JSON.parse(o.text) as Record<string, unknown>;
@@ -223,6 +231,14 @@ function humanOps(cmd: string, o: ToolOutcome): string {
       ...checks.map((k) => `  ${k.status.padEnd(4)} ${k.name}: ${k.message}`),
     ].join("\n");
   }
+  if (cmd === "ci-check" || cmd === "ci-generate") {
+    const opt = (j.options ?? {}) as { branch?: string | null; mobile?: boolean; origin?: string };
+    return [
+      String(j.message),
+      `opciones (${String(opt.origin)}): rama ${opt.branch ?? "(solo manual)"}, móvil ${opt.mobile ? "sí" : "no"}`,
+      ...(typeof j.diff === "string" && j.diff ? [`líneas distintas: ${String(j.differing_lines)}`, j.diff, ...(j.diff_truncated ? ["(diff truncado)"] : [])] : []),
+    ].join("\n");
+  }
   return o.text;
 }
 
@@ -252,6 +268,11 @@ export async function runOps(argv: string[], io: CliIo, ctx: Ctx = createContext
     });
   } else if (cmd === "env-check") {
     outcome = await opsEnvCheck(ctx, { project: need(p, "project"), env: need(p, "env") });
+  } else if (cmd === "ci-check" || cmd === "ci-generate") {
+    if (p.flags.get("mobile") === true && p.flags.get("no-mobile") === true) throw new ShardevError("invalid_input", "--mobile y --no-mobile son excluyentes");
+    const ci = { project: need(p, "project"), env: need(p, "env"), branch: strFlag(p, "branch"), mobile: p.flags.get("mobile") === true ? true : p.flags.get("no-mobile") === true ? false : undefined };
+    // La CLI la ejecuta una persona: puede escribir cualquier entorno (el MCP nunca escribe producción).
+    outcome = cmd === "ci-check" ? await opsCiCheck(ctx, ci) : await opsCiGenerate(ctx, ci, { allowProduction: true });
   } else if (cmd === "log-read") {
     const args = { ref: need(p, "ref"), grep: strFlag(p, "grep"), context: intFlag(p, "context"), offset: intFlag(p, "offset"), limit: intFlag(p, "limit") };
     // Mismos límites que el esquema de la herramienta MCP log_read.

@@ -26,10 +26,10 @@ const MAX_FILE_BYTES = 1024 * 1024;
 /** Nombres que deben ser distintos de los de producción en un entorno que no lo es. */
 const ISOLATION_NAMES = ["DB_DATABASE", "DB_USERNAME", "REDIS_HOST", "AWS_PROJECT_NAME", "AWS_DOMAIN_NAME"] as const;
 
-type SafeRead = { state: "ok"; text: string } | { state: "missing" } | { state: "bad"; reason: string };
+export type SafeRead = { state: "ok"; text: string } | { state: "missing" } | { state: "bad"; reason: string };
 
 /** Lee un archivo solo si es regular (no enlace simbólico) y su ruta real queda dentro de `realRoot`. */
-async function safeReadFile(path: string, realRoot: string): Promise<SafeRead> {
+export async function safeReadFile(path: string, realRoot: string): Promise<SafeRead> {
   let st;
   try {
     st = await lstat(path);
