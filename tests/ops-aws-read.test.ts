@@ -297,6 +297,21 @@ describe("ops_logs", () => {
     expectOnlyAllowedArgv(runner);
   });
 
+  test("log_group_prefix por entorno llega al argv; el default sigue siendo /ecs/; el servicio sigue validado", async () => {
+    const yaml = OPS_YAML_SERVICES().replace("    services: [demo-staging-app, demo-staging-worker]\n", "    services: [demo-staging-app, demo-staging-worker]\n    log_group_prefix: /demo/staging/\n");
+    const { ctx, runner } = await setup({ yaml, responders: { "logs filter-log-events": cwLogs([]) } });
+    expect((await opsLogs(ctx, { project: "demo", env: "staging", service: "demo-staging-app" })).isError).toBe(false);
+    expect(argAfter(runner.reads[0]!, "--log-group-name")).toBe("/demo/staging/demo-staging-app");
+    // otro entorno sin la clave conserva el default
+    expect((await opsLogs(ctx, { project: "demo", env: "prod", service: "demo-app" })).isError).toBe(false);
+    expect(argAfter(runner.reads.at(-1)!, "--log-group-name")).toBe("/ecs/demo-app");
+    // un servicio no declarado se rechaza sin llamar a CloudWatch, aunque exista el prefijo
+    const n = runner.reads.length;
+    expect(await opsLogs(ctx, { project: "demo", env: "staging", service: "demo-app" })).toMatchObject({ isError: true });
+    expect(await opsLogs(ctx, { project: "demo", env: "staging", service: "../x" })).toMatchObject({ isError: true });
+    expect(runner.reads).toHaveLength(n);
+  });
+
   test("defaults, límites y ventanas calculadas desde ctx.now() (primera subventana de 5 min, inclusivas)", async () => {
     const { ctx, runner } = await setup({ responders: { "logs filter-log-events": cwLogs([]) } });
     const base = { project: "demo", env: "staging", service: "demo-staging-app" };
