@@ -18,6 +18,7 @@ Fecha: 2026-11-01. Alcance: spec, capas, renderer, plan/apply, verify y herramie
 7. **`platforms` de mobile** es una lista (`android`, `ios`), al menos una. `key` de app: `^[a-z][a-z0-9]{0,30}$` (empieza por letra porque deriva clases/tablas). También se rechazan `provider` y `modelo` duplicados entre apps.
 8. **Escaneo de secretos**: falsos positivos posibles (p. ej. `password: 'password'` en una factory); se resuelve con el marcador `shardev-allow-secret` en la línea. Los hits solo informan ruta y línea, nunca el contenido.
 9. Los pasos de `verify` no pueden referenciar la ruta de salida (no hay variable `root`); solo env literal explícito por paso.
+10. **`mobile` sin capa (ADJ-07).** Con las plantillas actuales `spec.mobile` no genera nada (solo consta en `.ops/lock.yaml`; comprobado comparando salidas con y sin `mobile`). `buildOutputs` lo rechaza con `invalid_spec` si no hay ninguna capa de `scope: mobile`, salvo en modo `onlyApps` (`app_create`, que parte del spec del lock). Va en el build y no en el esquema para que specs y locks existentes sigan resolviendo, y se desactiva solo cuando exista una capa mobile.
 
 ## No hecho / abierto
 

@@ -148,6 +148,18 @@ export function assertFeatureLayers(layers: Layer[], spec: ProjectSpec): void {
   }
 }
 
+/**
+ * `spec.mobile` solo se puede pedir si hay al menos una capa de scope `mobile`; hoy no existe ninguna y el
+ * spec se limitaba a quedar anotado en el lock sin generar nada. Se comprueba al planificar/construir (no en
+ * el esquema, para que specs y locks ya generados con `mobile` sigan resolviendo) y se desactiva solo en
+ * cuanto exista una capa mobile.
+ */
+export function assertMobileLayers(layers: Layer[], spec: ProjectSpec): void {
+  if (spec.mobile && !layers.some((l) => l.scope === "mobile")) {
+    throw new ShardevError("invalid_spec", "Spec inválido: mobile todavía no está disponible (no existe ninguna capa de scope mobile); quita `mobile` del spec.");
+  }
+}
+
 function renderDeep(value: unknown, vars: Vars, opts: RenderOptions, name: string): unknown {
   if (typeof value === "string") return render(value, vars, opts, name);
   if (Array.isArray(value)) return value.map((v) => renderDeep(v, vars, opts, name));
@@ -209,6 +221,8 @@ export interface BuildOptions {
 export async function buildOutputs(spec: ProjectSpec, templatesDir: string, base: BaseReader, options: BuildOptions = {}): Promise<BuiltOutput> {
   const layers = await loadLayers(templatesDir);
   assertFeatureLayers(layers, spec);
+  // app_create (onlyApps) parte del spec guardado en el lock, que puede traer `mobile`: ahí no se aplica.
+  if (!options.onlyApps) assertMobileLayers(layers, spec);
   const overlay = new Map<string, Buffer>();
   const created = new Map<string, PlannedFile>();
   const edited = new Map<string, { before: Buffer; layer: string }>();
