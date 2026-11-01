@@ -4,6 +4,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { z } from "zod";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
 import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_CI_CHECK, OPS_CI_GENERATE, OPS_ENV_CHECK, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
+import { recordCall } from "./ops/audit-call.js";
 import { logRead } from "./ops/log-read.js";
 import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsStatus } from "./ops/status.js";
@@ -38,20 +39,7 @@ function wrap<A extends Record<string, unknown>>(ctx: Ctx, op: OperationDef, han
       stderrLog(ctx, `${op.name} falló: ${e instanceof Error ? e.message : String(e)}`);
       outcome = { text: "Error interno de la herramienta (detalle en stderr del servidor).", isError: true, decision: "error" };
     }
-    try {
-      await ctx.audit.record({
-        tool: op.name,
-        project: outcome.project ?? (typeof args.project === "string" ? args.project : undefined),
-        env: outcome.env,
-        tier: op.tier,
-        decision: outcome.decision,
-        exit_code: outcome.exitCode,
-        duration_ms: Date.now() - started,
-        args,
-      });
-    } catch (e) {
-      stderrLog(ctx, `no se pudo escribir la auditoría: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    await recordCall(ctx, op, { source: "mcp", args, outcome, started }, (m) => stderrLog(ctx, m));
     return { content: [{ type: "text" as const, text: ctx.redactor.redact(outcome.text) }], ...(outcome.isError ? { isError: true } : {}) };
   };
 }

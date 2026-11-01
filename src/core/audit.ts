@@ -13,6 +13,8 @@ export type Decision =
   | "error";
 
 export interface AuditEntry {
+  /** Origen de la llamada. Las líneas antiguas no lo traen (eran siempre del servidor MCP). */
+  source?: "cli" | "mcp";
   tool: string;
   project?: string;
   env?: string;

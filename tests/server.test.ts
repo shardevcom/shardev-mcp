@@ -72,7 +72,7 @@ describe("servidor MCP", () => {
     expect(r.isError).toBe(true);
     expect(r.text).toContain("no declara `services`");
     const audit = (await readFile(auditFile(paths), "utf8")).trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
-    expect(audit.at(-1)).toMatchObject({ tool: "ops_services", project: "demo", env: "staging", tier: "T1", decision: "rejected" });
+    expect(audit.at(-1)).toMatchObject({ source: "mcp", tool: "ops_services", project: "demo", env: "staging", tier: "T1", decision: "rejected" });
   });
 
   test("ops_services por MCP con servicios declarados: lee y audita decision allowed", async () => {
