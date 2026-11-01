@@ -1,7 +1,6 @@
 {
   "name": "@shardev/cli",
   "version": "0.1.0",
-  "private": true,
   "description": "Servidor MCP para crear y operar proyectos Laravel + AWS ECS",
   "type": "module",
   "license": "MIT",
@@ -9,13 +8,14 @@
     "node": ">=22"
   },
   "bin": {
-    "shardev": "./dist/cli.js"
+    "shardev": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "test:slow": "vitest run --config vitest.slow.config.ts"
+    "test:slow": "vitest run --config vitest.slow.config.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
@@ -38,5 +38,8 @@
   "bugs": {
     "url": "https://github.com/shardevcom/shardev-mcp/issues"
   },
-  "homepage": "https://github.com/shardevcom/shardev-mcp#readme"
+  "homepage": "https://github.com/shardevcom/shardev-mcp#readme",
+  "publishConfig": {
+    "access": "public"
+  }
 }

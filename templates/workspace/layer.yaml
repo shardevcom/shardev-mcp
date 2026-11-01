@@ -3,4 +3,6 @@ scope: project
 order: 15
 requires: [project.name]
 files:
-  - { tree: files, dest: ., render: [package.json, .npmrc] }
+  - { tree: files, dest: ., render: [package.json] }
+  # npm nunca empaqueta .npmrc: se guarda sin punto y se restaura al generar.
+  - { src: dotfiles/npmrc, dest: .npmrc }
