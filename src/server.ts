@@ -22,7 +22,7 @@ import { defaultPaths, type Paths } from "./core/paths.js";
 import type { Runner } from "./core/exec.js";
 
 export const SERVER_NAME = "shardev-mcp";
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = "0.2.0";
 
 /** stdout es el canal del protocolo: todo log va a stderr, redactado. */
 export function stderrLog(ctx: Pick<Ctx, "redactor">, message: string): void {
