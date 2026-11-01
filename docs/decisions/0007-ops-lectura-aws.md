@@ -67,3 +67,7 @@ Además de la redacción de secretos, el contenido de `ops_logs` se enmascara **
 - El resultado de `ops_logs` solo incluye `personal_data_masked` (cantidad de coincidencias enmascaradas), nunca los valores.
 - El texto de `filter` **no** se enmascara: se envía tal cual a CloudWatch (la búsqueda es en el servidor) y queda en la auditoría con la redacción estándar. Si contiene un correo o un número, ese dato consta en la consulta y en `audit.jsonl`; evita poner datos personales en `filter`. La cabecera del archivo guardado no incluye el filtro (solo si se aplicó, `filter_applied`, en el resultado).
 - El enmascarado es idempotente (`[EMAIL]` y `[NUMERO]` no contienen @ ni dígitos), y `log_read` devuelve el texto ya enmascarado.
+
+## Prueba real por el protocolo MCP (2026-11-01)
+
+Con un cliente MCP por stdio contra `shardev mcp serve` y AWS real, en un entorno de staging y otro de producción: `ops_services`, `ops_tasks`, `ops_logs` y `log_read` respondieron correctamente, y también `ops_env_check`, `ops_ci_check` y `ops_ci_generate`. En producción, `ops_ci_generate` no escribió nada. Se rechazaron un servicio de otro entorno y la llamada sin `env`, esta última por validación del esquema MCP antes de llegar a la herramienta. La auditoría registró las llamadas.
