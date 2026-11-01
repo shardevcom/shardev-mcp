@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { CLI_VERSION, USAGE, runApp, runOps, runProject } from "./cli-run.js";
 import { ShardevError } from "./core/errors.js";
+import { isRealTty, readOneLine } from "./core/tty-io.js";
 import { serve } from "./server.js";
 
 async function readStdin(): Promise<string> {
@@ -21,6 +22,8 @@ async function main(argv: string[]): Promise<number> {
         out: (s) => process.stdout.write(s),
         err: (s) => process.stderr.write(s),
         stdin: readStdin,
+        isTty: isRealTty,
+        readLine: readOneLine,
       });
     } catch (e) {
       if (e instanceof ShardevError) {
