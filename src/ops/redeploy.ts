@@ -1,4 +1,4 @@
-import { classifyEnvironment, commandOnlyResponse } from "../core/policy.js";
+import { changeCommandOutcome } from "./change-command.js";
 import { gateChange, type ChangeArgs } from "./change-gate.js";
 import type { Ctx, ToolOutcome } from "./context.js";
 
@@ -13,11 +13,5 @@ export type OpsRedeployArgs = ChangeArgs;
 export async function opsRedeploy(ctx: Ctx, args: OpsRedeployArgs): Promise<ToolOutcome> {
   const gate = await gateChange(ctx, args, "ecs");
   if (!gate.ok) return gate.outcome;
-  const prod = classifyEnvironment(gate.env, gate.project.productionEnvs).production;
-  const argv = ["shardev", "ops", "redeploy", "--project", gate.project.name, "--env", gate.env.name, ...(gate.all ? ["--all"] : ["--service", gate.services[0]!])];
-  const text = [
-    `Afectaría a: ${gate.services.join(", ")} (entorno ${gate.env.name}, producción: ${prod ? "sí" : "no"}).`,
-    commandOnlyResponse(gate.decision, argv),
-  ].join("\n");
-  return { text, isError: false, decision: "command-only", project: gate.project.name, env: gate.env.name, exitCode: null };
+  return changeCommandOutcome(gate, "redeploy");
 }

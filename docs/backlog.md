@@ -6,7 +6,7 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 
 ## Ya disponible
 
-`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `ops_env_check` (ENV-01: validación local de un entorno, sin AWS; `root` opcional en `projects.yaml`), `ops_ci_check` y `ops_ci_generate` (CI-01: workflows de despliegue desde una plantilla del proyecto; en producción el MCP no escribe), `shardev ops status|services|tasks|logs|env-check|ci-check|ci-generate|log-read`, `project_*` y `app_*`. `ops_redeploy` (BASE-01: T3, el MCP solo devuelve el comando) y `shardev ops redeploy` (SVC-01: lo ejecuta una persona con confirmación; ver `docs/decisions/0010-operaciones-t3.md`). Las ejecuciones por CLI también quedan en `audit.jsonl` (`source: "cli"`; ADJ-09).
+`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `ops_env_check` (ENV-01: validación local de un entorno, sin AWS; `root` opcional en `projects.yaml`), `ops_ci_check` y `ops_ci_generate` (CI-01: workflows de despliegue desde una plantilla del proyecto; en producción el MCP no escribe), `shardev ops status|services|tasks|logs|env-check|ci-check|ci-generate|log-read`, `project_*` y `app_*`. `ops_redeploy` (BASE-01: T3, el MCP solo devuelve el comando) y `ops_scale` y `shardev ops scale` (SVC-02: cambia el desired-count, 0 exige una frase distinta) y `shardev ops redeploy` (SVC-01: lo ejecuta una persona con confirmación; ver `docs/decisions/0010-operaciones-t3.md`). Las ejecuciones por CLI también quedan en `audit.jsonl` (`source: "cli"`; ADJ-09).
 
 ## 1. Ajustes a lo existente
 
@@ -31,7 +31,6 @@ Requisito de todas las operaciones que modifican AWS.
 | ENV-03 | Dividir un `.env` en configuración y secretos | T2 | Con copia de seguridad | Bajo |
 | ENV-04 | Adoptar o crear un perfil AWS | T2 | Nunca borra una credencial que no se haya guardado antes | Medio |
 | CI-02 | Comparar y aplicar variables del entorno de GitHub | T1/T2 | Los secretos solo se comprueban por nombre | Medio |
-| SVC-02 | Cambiar `desired-count` (levantar y apagar) | T3 | Apagar deja el entorno fuera de línea | Bajo |
 | SEC-01 | Listar y programar el borrado de secretos antiguos | T1/T3 | Con ventana de recuperación | Medio |
 | SEC-02 | Sincronizar secretos | T3 | Sin valores en argumentos de proceso; reiniciar servicios debe ser explícito | Alto |
 | DEP-01 | Construir y publicar la imagen | T3 | Etiquetas inmutables por commit | Medio |
@@ -59,9 +58,8 @@ Requisito de todas las operaciones que modifican AWS.
 ## Orden recomendado
 
 1. ADJ-02.
-2. SVC-02.
-3. Resto de ENV y CI, LOC y REL.
-4. SEC, DEP y TPL-01.
-5. RUN, DEL, MOB, MAIL y UI según necesidad.
+2. Resto de ENV y CI, LOC y REL.
+3. SEC, DEP y TPL-01.
+4. RUN, DEL, MOB, MAIL y UI según necesidad.
 
 BASE-03 y BASE-04 se abordan cuando una operación concreta los necesite.

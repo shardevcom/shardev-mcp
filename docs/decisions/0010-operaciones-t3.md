@@ -46,3 +46,15 @@ Flujo, en este orden:
 **Sin atajos:** no existe `--yes`/`--force`; este subcomando rechaza cualquier flag fuera de `project`, `env`, `service`, `all` y `json` (el resto de la CLI ignora flags desconocidos). `--json` deja en stdout solo el JSON del resultado; resumen y prompt van a stderr.
 
 **Garantía estructural:** el handler MCP (`src/ops/redeploy.ts`) sigue siendo command-only. El ejecutor (`src/ops/redeploy-exec.ts` y `src/core/aws-change.ts`) solo se importa desde `src/cli-run.ts`; un test recorre el grafo de imports desde `src/server.ts` y comprueba que no son alcanzables.
+
+## `ops_scale` y `shardev ops scale` (SVC-02)
+
+Mismo patrón que redeploy: el MCP (`ops_scale`, T3) solo devuelve el comando; la CLI (`shardev ops scale ... --desired-count N`) lo ejecuta tras confirmación. El flujo común (gate, confirmación, intención con fallo cerrado, secuencia con parada, resultado) vive en `src/ops/change-exec.ts`; `redeploy-exec.ts` y `scale-exec.ts` solo aportan su plan. En el MCP, `change-command.ts` comparte la construcción del texto. Ninguno de estos módulos de ejecución es alcanzable desde `src/server.ts` (test del grafo de imports).
+
+- **Valor:** entero 0-20, validado en el esquema MCP, en el handler y en la CLI antes de cualquier otra cosa (`1.5`, `-1`, `abc`, ausente = rechazado). Mismo allowlist de flags que redeploy más `--desired-count`.
+- **Estado previo:** antes del prompt se lee `ecs describe-services` (lectura ya permitida) de los servicios objetivo y el resumen muestra `deseadas/en ejecución -> N`. Si la lectura falla (incluida la falta de sesión) o falta un servicio en la respuesta, se para sin preguntar ni cambiar nada.
+- **Sin cambios:** los servicios que ya están en N no se tocan y se informan `unchanged`. Si todos lo están: exit 0, sin prompt, sin entrada de intención y con auditoría de resultado `allowed`.
+- **Frase:** `<proyecto>/<entorno>` para N>0; para N=0 `<proyecto>/<entorno>/apagar`, y el resumen avisa en grande de que los servicios quedan **fuera de línea**. La frase de apagar no vale para N>0 ni la llana para 0.
+- **Autoscaling:** no se intenta detectar. Una política de autoscaling programado, si existe, puede volver a cambiar el número de tareas; el resumen lo advierte para N=0.
+- **AWS:** `ecs update-service --cluster C --service S --desired-count N` más los argumentos habituales, sin `--force-new-deployment`. La respuesta se filtra al `desiredCount`.
+- **Estados:** `done`, `failed`, `unknown` (timeout), `not_attempted` y `unchanged`. Se redacta "iniciado": que AWS acepte el desired-count no significa que las tareas ya estén en marcha o detenidas.

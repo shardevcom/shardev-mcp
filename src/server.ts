@@ -3,13 +3,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { z } from "zod";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
-import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_CI_CHECK, OPS_CI_GENERATE, OPS_ENV_CHECK, OPS_LOGS, OPS_REDEPLOY, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
+import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_CI_CHECK, OPS_CI_GENERATE, OPS_ENV_CHECK, OPS_LOGS, OPS_REDEPLOY, OPS_SCALE, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
 import { recordCall } from "./ops/audit-call.js";
 import { logRead } from "./ops/log-read.js";
 import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsStatus } from "./ops/status.js";
 import { opsServices, opsTasks } from "./ops/ecs.js";
 import { opsRedeploy } from "./ops/redeploy.js";
+import { opsScale } from "./ops/scale.js";
 import { opsLogs } from "./ops/logs.js";
 import { opsEnvCheck } from "./ops/env-check.js";
 import { opsCiCheck, opsCiGenerate } from "./ops/ci.js";
@@ -132,6 +133,25 @@ export function createServer(options: { paths?: Paths; runner?: Runner; template
         .strict(),
     },
     wrap(ctx, OPS_REDEPLOY, opsRedeploy as Handler<{ project?: string; env?: string; service?: string; all?: boolean }>),
+  );
+
+  server.registerTool(
+    OPS_SCALE.name,
+    {
+      ...common(OPS_SCALE),
+      description:
+        "T3 (cambia AWS): NO ejecuta nada. Valida proyecto, entorno, servicios declarados y `desired_count` (entero 0-20), aplica la política y devuelve el comando exacto `shardev ops scale` para que lo ejecute una persona en su terminal (pedirá confirmación; para 0 una frase distinta). Indica exactamente uno: `service` o `all: true`; no hay objetivo por defecto. Con 0 los servicios quedan fuera de línea. Requiere la capacidad `ecs`. disabled, sin sesión, cuenta distinta o entrada inválida no devuelven ningún comando.",
+      inputSchema: z
+        .object({
+          project: PROJECT,
+          env: ENV_REQUIRED,
+          service: SERVICE.optional().describe("Un servicio exacto declarado en ops.yaml (excluyente con `all`)"),
+          all: z.literal(true).optional().describe("Todos los servicios declarados del entorno (excluyente con `service`)"),
+          desired_count: z.number().int().min(0).max(20).describe("Número deseado de tareas (0 apaga los servicios)"),
+        })
+        .strict(),
+    },
+    wrap(ctx, OPS_SCALE, opsScale as Handler<{ project?: string; env?: string; service?: string; all?: boolean; desired_count?: number }>),
   );
 
   server.registerTool(

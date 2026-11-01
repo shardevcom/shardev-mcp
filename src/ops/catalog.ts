@@ -123,6 +123,13 @@ export const OPS_REDEPLOY = register({
   usesAws: true,
 });
 
+export const OPS_SCALE = register({
+  name: "ops_scale",
+  tier: "T3",
+  summary: "Cambia el desired-count de servicios ECS declarados (0-20). El MCP nunca lo ejecuta: devuelve el comando `shardev ops scale` para que lo ejecute una persona. Con 0 los servicios quedan fuera de línea.",
+  usesAws: true,
+});
+
 // Fase 3: generador (cambian solo el sistema de archivos local; nunca AWS).
 export const PROJECT_PLAN = register({
   name: "project_plan",
