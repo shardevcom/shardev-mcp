@@ -1,11 +1,11 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { runOps, runProject, USAGE, type CliIo } from "../src/cli-run.js";
 import { createContext } from "../src/ops/context.js";
 import { logRead } from "../src/ops/log-read.js";
 import { awsRunner, cwLogs } from "./helpers/aws-fixtures.js";
-import { OPS_YAML_SERVICES, cleanup, registerDemoProject, tempPaths } from "./helpers/fixtures.js";
+import { OPS_YAML_SERVICES, cleanup, registerDemoProject, tempPaths, write } from "./helpers/fixtures.js";
 import { SPEC, setup } from "./helpers/gen-fixtures.js";
 
 function io(stdin = ""): { io: CliIo; out: string[] } {
@@ -168,5 +168,31 @@ describe("shardev ops (solo lectura, mismas funciones que las herramientas)", ()
 
   test("la ayuda documenta ops", () => {
     for (const w of ["ops status", "ops services", "ops tasks", "ops logs", "ops log-read", "--ref", "--grep", "--since-minutes", "--filter", "--limit"]) expect(USAGE).toContain(w);
+  });
+});
+
+describe("shardev ops env-check", () => {
+  afterEach(cleanup);
+
+  test("--json imprime el JSON de la herramienta; falla con código 1 y no imprime valores; --env es obligatorio", async () => {
+    const paths = await tempPaths();
+    const dir = await registerDemoProject(paths, "", OPS_YAML_SERVICES());
+    const ctx = createContext(paths);
+    const a = io();
+    expect(await runOps(["env-check", "--project", "demo", "--env", "staging", "--json"], a.io, ctx)).toBe(1); // sin .aws/env
+    expect(JSON.parse(a.out.join(""))).toMatchObject({ project: "demo", env: "staging", ok: false });
+
+    const envDir = join(dir, ".aws", "env", "staging");
+    await mkdir(envDir, { recursive: true, mode: 0o700 });
+    await write(join(envDir, "aws.env"), "AWS_PROFILE=demo-stg\n");
+    await write(join(envDir, "environment.env"), "APP_NAME=cli-valor-distintivo\n");
+    await writeFile(join(envDir, "secrets.env"), "APP_KEY=cli-secreto-distintivo\n", { mode: 0o600 });
+    const b = io();
+    expect(await runOps(["env-check", "--project", "demo", "--env", "staging"], b.io, ctx)).toBe(0);
+    const text = b.out.join("");
+    expect(text).toMatch(/^OK: demo\/staging/);
+    expect(text).not.toContain("distintivo");
+    await expect(runOps(["env-check", "--project", "demo"], io().io, ctx)).rejects.toThrow(/Falta --env/);
+    expect(USAGE).toContain("ops env-check");
   });
 });

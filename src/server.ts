@@ -3,12 +3,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { z } from "zod";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
-import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
+import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_ENV_CHECK, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
 import { logRead } from "./ops/log-read.js";
 import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsStatus } from "./ops/status.js";
 import { opsServices, opsTasks } from "./ops/ecs.js";
 import { opsLogs } from "./ops/logs.js";
+import { opsEnvCheck } from "./ops/env-check.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 import { appCreate, appPlan } from "./ops/app.js";
 import { AppPlanInputSchema } from "./gen/app.js";
@@ -123,6 +124,17 @@ export function createServer(options: { paths?: Paths; runner?: Runner; template
       },
     },
     wrap(ctx, OPS_LOGS, opsLogs as Handler<{ project?: string; env?: string; service?: string; since_minutes?: number; filter?: string; limit?: number }>),
+  );
+
+  server.registerTool(
+    OPS_ENV_CHECK.name,
+    {
+      ...common(OPS_ENV_CHECK),
+      description:
+        "Valida sin conexión (sin AWS, sin cambios) la configuración local de un entorno: manifest y política, .aws/env/<env>/{aws,environment,secrets}.env (existencia, enlaces simbólicos, permisos, git), sintaxis de nombres, env.schema, aislamiento respecto a producción y consistencia con ops.yaml. Devuelve checks con estado ok/warn/fail/skip; isError si alguno falla. NUNCA devuelve valores, solo nombres de variables, rutas relativas y conteos. Solo valida archivos locales, no lo desplegado.",
+      inputSchema: { project: PROJECT, env: ENV_REQUIRED },
+    },
+    wrap(ctx, OPS_ENV_CHECK, opsEnvCheck as Handler<{ project?: string; env?: string }>),
   );
 
   server.registerTool(

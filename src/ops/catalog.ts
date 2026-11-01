@@ -93,6 +93,14 @@ export const OPS_LOGS = register({
   usesAws: true,
 });
 
+// Validación local (sin AWS) de los archivos de variables de un entorno; ver docs/decisions/0008-env-check.md.
+export const OPS_ENV_CHECK = register({
+  name: "ops_env_check",
+  tier: "T0",
+  summary: "Valida sin conexión los archivos de variables de un entorno (.aws/env/<env>/): disposición, nombres, esquema, aislamiento y consistencia con ops.yaml. Nunca devuelve valores.",
+  usesAws: false,
+});
+
 // Fase 3: generador (cambian solo el sistema de archivos local; nunca AWS).
 export const PROJECT_PLAN = register({
   name: "project_plan",
