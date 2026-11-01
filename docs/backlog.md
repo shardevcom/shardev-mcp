@@ -13,6 +13,8 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 | ID | Tarea | Por qué | Esfuerzo |
 |---|---|---|---|
 | ADJ-02 | Medir la redacción con logs reales que contengan datos sensibles | La lectura real ya funciona, pero las muestras no tenían nada que enmascarar, así que no prueban la redacción | Bajo |
+| ADJ-10 | Capturar SIGINT y SIGTERM durante un cambio y escribir el resultado con estado `unknown` | Hoy Ctrl-C deja una entrada `intent` sin `result` y sin informe por servicio | Bajo |
+| ADJ-11 | Validar los caracteres de `cluster` y `aws_profile` en `ops.yaml` | Son los únicos textos del manifiesto que llegan a los argumentos de `aws` sin validar. No se conoce una explotación, porque van como argumentos separados | Bajo |
 
 ## 2. Base de cambios
 

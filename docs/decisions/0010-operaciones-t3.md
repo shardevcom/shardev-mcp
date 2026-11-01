@@ -15,7 +15,7 @@ El servidor MCP nunca ejecuta un cambio en AWS: solo devuelve el comando `sharde
 - No hay `--yes`, `--force` ni variable de entorno que lo eluda, tampoco `CI`.
 - Resumen y prompt van a stderr: la salida `--json` por stdout sigue siendo exactamente el JSON de la herramienta.
 - El resumen no se redacta dentro del helper: el llamador pasa líneas ya redactadas.
-- `CliIo` gana `isTty?` y `readLine?` (inyectables en tests); si faltan se trata como no-TTY. La implementación real vive en `src/cli.ts`: lee una línea y suelta stdin para que el proceso pueda terminar.
+- `CliIo` gana `isTty?` y `readLine?` (inyectables en tests); si faltan se trata como no-TTY. La implementación real vive en `src/core/tty-io.ts` y la conecta `src/cli.ts`: lee una línea y suelta stdin para que el proceso pueda terminar.
 
 ## Límite conocido
 
@@ -58,3 +58,9 @@ Mismo patrón que redeploy: el MCP (`ops_scale`, T3) solo devuelve el comando; l
 - **Autoscaling:** no se intenta detectar. Una política de autoscaling programado, si existe, puede volver a cambiar el número de tareas; el resumen lo advierte para N=0.
 - **AWS:** `ecs update-service --cluster C --service S --desired-count N` más los argumentos habituales, sin `--force-new-deployment`. La respuesta se filtra al `desiredCount`.
 - **Estados:** `done`, `failed`, `unknown` (timeout), `not_attempted` y `unchanged`. Se redacta "iniciado": que AWS acepte el desired-count no significa que las tareas ya estén en marcha o detenidas.
+
+## Estados ambiguos
+
+Un timeout o una señal que mata al CLI de AWS se informan como `unknown`, porque la petición pudo aplicarse. Una salida distinta de 0 se informa como `failed`, pero tampoco prueba que no se aplicara (por ejemplo, un timeout de lectura del propio CLI), así que el resultado pide comprobar el estado real.
+
+Interrumpir la CLI con Ctrl-C no escribe entrada de resultado: el proceso termina y la petición en curso puede completarse. **Una entrada `intent` sin su `result` significa que el cambio pudo aplicarse**, total o parcialmente. Registrarlo mejor queda pendiente en `ADJ-10`.

@@ -14,7 +14,7 @@ export type AwsChange = (typeof ALLOWED_AWS_CHANGES)[number];
 export type AwsChangeResult =
   | { state: "ok"; json: unknown }
   | { state: "no-session"; message: string; loginCommand: string }
-  /** Se agotó el tiempo: el cambio PUDO aplicarse. No se sabe. */
+  /** Se agotó el tiempo o una señal mató el proceso: el cambio PUDO aplicarse. No se sabe. */
   | { state: "timeout"; message: string }
   | { state: "error"; message: string };
 
@@ -40,6 +40,8 @@ export async function awsChange(
 
   if (r.spawnError) return { state: "error", message: `No se pudo ejecutar el CLI de AWS (${clean(r.spawnError)}). No se cambió nada.` };
   if (r.timedOut) return { state: "timeout", message: `${label} excedió el tiempo de espera.` };
+  // Proceso terminado por una señal ajena al timeout: la petición pudo llegar a AWS.
+  if (r.exitCode === null) return { state: "timeout", message: `${label} terminó por una señal (${r.signal ?? "desconocida"}) sin informar el resultado.` };
   if (r.exitCode !== 0) {
     if (NO_SESSION_RE.test(r.stderr)) {
       const loginCommand = loginCommandFor(target.profile);

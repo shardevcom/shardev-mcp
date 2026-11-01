@@ -65,7 +65,7 @@ ops scale CAMBIA AWS (ecs update-service --desired-count N): mismas reglas que r
 primer fallo). Antes de preguntar lee el estado actual y no toca los servicios que ya están en N; con N=0 los servicios quedan fuera de línea y la
 frase es <proyecto>/<entorno>/apagar. No detecta autoscaling. AWS aceptar el valor no significa que las tareas ya estén en marcha o detenidas.
 ops log-read no necesita --project ni --env: lee solo por referencia y marca el contenido como dato no confiable.
-Con --json la salida es exactamente el JSON de la herramienta; el código de salida es 1 si falla.
+Con --json, si la herramienta responde con JSON, la salida es exactamente ese JSON; un rechazo previo (política, sesión, entrada) puede ser texto: comprueba primero el código de salida, que es distinto de 0 si falla.
 `;
 
 export interface CliIo {
