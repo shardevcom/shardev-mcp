@@ -101,6 +101,20 @@ export const OPS_ENV_CHECK = register({
   usesAws: false,
 });
 
+// Workflows de despliegue desde una plantilla del proyecto; ver docs/decisions/0009-ci-workflows.md.
+export const OPS_CI_CHECK = register({
+  name: "ops_ci_check",
+  tier: "T0",
+  summary: "Renderiza en memoria el workflow de despliegue de un entorno y lo compara con el archivo actual (up_to_date, missing o different). No escribe nada.",
+  usesAws: false,
+});
+export const OPS_CI_GENERATE = register({
+  name: "ops_ci_generate",
+  tier: "T2",
+  summary: "Escribe .github/workflows/deploy-<env>.yml desde la plantilla del proyecto (atómico, solo esa ruta). En producción nunca escribe: devuelve el comando shardev para que lo ejecute una persona.",
+  usesAws: false,
+});
+
 // Fase 3: generador (cambian solo el sistema de archivos local; nunca AWS).
 export const PROJECT_PLAN = register({
   name: "project_plan",

@@ -3,13 +3,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { z } from "zod";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
-import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_ENV_CHECK, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
+import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_CI_CHECK, OPS_CI_GENERATE, OPS_ENV_CHECK, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
 import { logRead } from "./ops/log-read.js";
 import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsStatus } from "./ops/status.js";
 import { opsServices, opsTasks } from "./ops/ecs.js";
 import { opsLogs } from "./ops/logs.js";
 import { opsEnvCheck } from "./ops/env-check.js";
+import { opsCiCheck, opsCiGenerate } from "./ops/ci.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 import { appCreate, appPlan } from "./ops/app.js";
 import { AppPlanInputSchema } from "./gen/app.js";
@@ -135,6 +136,36 @@ export function createServer(options: { paths?: Paths; runner?: Runner; template
       inputSchema: { project: PROJECT, env: ENV_REQUIRED },
     },
     wrap(ctx, OPS_ENV_CHECK, opsEnvCheck as Handler<{ project?: string; env?: string }>),
+  );
+
+  const CI_INPUT = {
+    project: PROJECT,
+    env: ENV_REQUIRED,
+    branch: z.string().max(200).optional().describe("Rama que despliega con cada push (^[A-Za-z0-9._/-]+$). Si se omite junto con `mobile`, se reutilizan las opciones guardadas en el workflow actual. Producción exige rama (explícita o guardada); un entorno que no es producción no puede usar main ni master."),
+    mobile: z.boolean().optional().describe("Incluir los bloques de apps móviles (por defecto true en producción, false en el resto)"),
+  };
+  type CiArgs = { project?: string; env?: string; branch?: string; mobile?: boolean };
+
+  server.registerTool(
+    OPS_CI_CHECK.name,
+    {
+      ...common(OPS_CI_CHECK),
+      description:
+        "Renderiza en memoria el workflow de despliegue de un entorno (plantilla <root>/.github/templates/deploy.template.yml) y lo compara con <root>/.github/workflows/deploy-<env>.yml: up_to_date, missing o different, con conteo de líneas distintas y un diff acotado. Se ignora la cabecera de comentarios generada (se compara desde la primera línea `name:`). Devuelve también las opciones en uso. No escribe nada, no usa git ni GitHub; isError si no está al día.",
+      inputSchema: CI_INPUT,
+    },
+    wrap(ctx, OPS_CI_CHECK, opsCiCheck as Handler<CiArgs>),
+  );
+
+  server.registerTool(
+    OPS_CI_GENERATE.name,
+    {
+      ...common(OPS_CI_GENERATE),
+      description:
+        "Escribe de forma atómica .github/workflows/deploy-<env>.yml a partir de la plantilla del proyecto (solo esa ruta; rechaza enlaces simbólicos). Para un entorno de PRODUCCIÓN nunca escribe: devuelve decision `command-only` con el comando `shardev ops ci-generate ...` que debe ejecutar una persona. No hace commit ni push: el archivo debe revisarse y versionarse a mano.",
+      inputSchema: CI_INPUT,
+    },
+    wrap(ctx, OPS_CI_GENERATE, ((c: Ctx, a: CiArgs) => opsCiGenerate(c, a)) as Handler<CiArgs>),
   );
 
   server.registerTool(
