@@ -21,7 +21,7 @@ const ISO = String.raw`(?<![\d])\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:[
 const UUID = String.raw`\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`;
 const TIME_KEY = String.raw`(?:ts|time|timestamp|epoch|date|datetime|[a-z_]*_at|[a-z]*At|iat|exp|nbf|duration|elapsed|latency)`;
 const EPOCH = String.raw`(?<![\w])${TIME_KEY}["']?\s*[=:]\s*["']?1(?:\d{9}|\d{12})(?!\d)`;
-const EMAIL = String.raw`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`;
+const EMAIL = String.raw`[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`;
 const LONG = String.raw`(?<!\w|\d\.)\+?\d{7,}(?!\w|\.\d)`;
 const GROUPED = String.raw`(?<!\w|\d\.)\+?\d{1,4}(?:[ -]\d{2,4}){2,}(?!\w|\.\d)`;
 
