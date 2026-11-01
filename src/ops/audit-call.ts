@@ -17,6 +17,9 @@ export async function recordCall(
     started: number;
     /** Exit code por defecto cuando el resultado no trae uno. */
     exitCode?: number | null;
+    phase?: NonNullable<AuditEntry["phase"]>;
+    /** Si es true, un fallo de escritura se propaga (T3 falla cerrado) en vez de solo avisar. */
+    strict?: boolean;
   },
   warn: (message: string) => void,
 ): Promise<void> {
@@ -24,16 +27,18 @@ export async function recordCall(
   try {
     await ctx.audit.record({
       source: call.source,
+      ...(call.phase ? { phase: call.phase } : {}),
       tool: op.name,
       project: outcome.project ?? (typeof args?.project === "string" ? args.project : undefined),
       env: outcome.env,
       tier: op.tier,
       decision: outcome.decision,
-      exit_code: outcome.exitCode ?? call.exitCode,
+      exit_code: outcome.exitCode !== undefined ? outcome.exitCode : call.exitCode,
       duration_ms: Date.now() - call.started,
       args,
     });
   } catch (e) {
+    if (call.strict) throw e;
     warn(`no se pudo escribir la auditoría: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
