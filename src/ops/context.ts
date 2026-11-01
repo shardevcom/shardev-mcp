@@ -29,13 +29,14 @@ export interface ToolOutcome {
 
 export function createContext(paths: Paths, overrides: Partial<Pick<Ctx, "runner" | "redactor" | "templatesDir" | "now">> = {}): Ctx {
   const redactor = overrides.redactor ?? new Redactor();
+  const now = overrides.now ?? (() => new Date());
   return {
     paths,
     runner: overrides.runner ?? exec,
     redactor,
-    logs: new LogStore(logsDir(paths), redactor),
+    logs: new LogStore(logsDir(paths), redactor, now),
     audit: new AuditLog(auditFile(paths), redactor),
     templatesDir: overrides.templatesDir ?? DEFAULT_TEMPLATES_DIR,
-    now: overrides.now ?? (() => new Date()),
+    now,
   };
 }

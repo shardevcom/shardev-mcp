@@ -2,11 +2,14 @@
 
 Servidor MCP (stdio) y CLI (`shardev`) para crear y operar proyectos Laravel + React + AWS ECS, pensado para reemplazar scripts de shell. Solo ESM, Node >= 22.
 
-**Estado: núcleo del generador.** Dos herramientas de lectura y cinco de generación local (T2, sin AWS). Pendientes (no existen todavía): `mobile_add`, las herramientas `ui_*` y cualquier operación que cambie AWS.
+**Estado: núcleo del generador y lecturas AWS.** Cinco herramientas de lectura (T0/T1: `ops_status`, `ops_services`, `ops_tasks`, `ops_logs`, `log_read`) y cinco de generación local (T2, sin AWS). Pendientes (no existen todavía): `mobile_add`, las herramientas `ui_*` y cualquier operación que cambie AWS.
 
 | Herramienta | Tier | Qué hace |
 |---|---|---|
 | `ops_status` | T1 | Lista proyectos registrados; con `project` (y opcionalmente `env`) muestra perfil AWS, identidad (`aws sts get-caller-identity`) y política efectiva por entorno. |
+| `ops_services` | T1 | Estado de los servicios ECS declarados del entorno (`ecs describe-services`): estado, conteos, task definition (`familia:revisión`), despliegues y últimos 5 eventos (texto no confiable). `project` y `env` obligatorios; `service` opcional (omitido = todos los de `services`). Requiere la capacidad `ecs`. |
+| `ops_tasks` | T1 | Hasta 20 tareas `RUNNING` (por defecto) o `STOPPED` de un servicio declarado (`list-tasks` + `describe-tasks`): id corto, estados, horas, `stopCode`/`stoppedReason` y contenedores (nombre, estado, `exitCode`, `reason`). Lista blanca de campos: nunca `overrides` ni variables de entorno. Requiere `ecs`. |
+| `ops_logs` | T1 | Busca en el grupo `/ecs/<servicio>` (`logs filter-log-events`; `since_minutes` 1-1440, por defecto 60; `limit` 1-1000, por defecto 200; `filter` literal de hasta 200 caracteres). **No devuelve el contenido**: lo guarda redactado y devuelve conteo, `truncated`, primer/último timestamp y `log_ref` para `log_read`. Devuelve los eventos **más recientes** de la ventana (los `limit` últimos, ascendentes en el archivo guardado). Borra los logs de esta herramienta con más de 7 días. Requiere `logs`. |
 | `log_read` | T0 | Lee/filtra (grep literal) un log guardado, solo por referencia. El contenido se devuelve marcado como dato no confiable. |
 | `project_plan` | T2 | Planifica un proyecto **nuevo** a partir de un spec: archivos, diffs de edits, comandos de verificación, conflictos y `plan_id` (30 min). No escribe el proyecto. |
 | `project_create` | T2 | Aplica un `plan_id` (nunca un spec): genera en un temporal junto al destino, verifica y renombra atómicamente. |
@@ -32,9 +35,9 @@ claude mcp add --scope user shardev -- shardev mcp serve
 # sin instalación global: claude mcp add --scope user shardev -- npx -y @shardev/cli mcp serve
 ```
 
-Para evitar prompts en las herramientas de solo lectura, permite `mcp__shardev__ops_status` y `mcp__shardev__log_read` en tus permisos. Las herramientas futuras de producción (T3) llevarán `_meta["anthropic/requiresUserInteraction"] = true` y pedirán confirmación en cada llamada (ver `docs/decisions/0001-spikes.md`).
+Para evitar prompts en las herramientas de solo lectura, permite `mcp__shardev__ops_status`, `mcp__shardev__ops_services`, `mcp__shardev__ops_tasks`, `mcp__shardev__ops_logs` y `mcp__shardev__log_read` en tus permisos. Las herramientas futuras de producción (T3) llevarán `_meta["anthropic/requiresUserInteraction"] = true` y pedirán confirmación en cada llamada (ver `docs/decisions/0001-spikes.md`).
 
-Prueba rápida: `shardev --version`. La CLI es un solo binario: `shardev mcp serve` inicia el servidor y `shardev project plan|create|verify [--json]` y `shardev app plan|create [--json]` ejecutan las mismas funciones que las herramientas `project_*` y `app_*`. Ejemplo: `shardev app plan --project-path ~/projects/acme --key supp --user-type new --json` y luego `shardev app create --plan-id plan_...`.
+Prueba rápida: `shardev --version`. La CLI es un solo binario: `shardev mcp serve` inicia el servidor y `shardev project plan|create|verify [--json]` `shardev app plan|create [--json]` ejecutan las mismas funciones que las herramientas `project_*` y `app_*`, y `shardev ops status|services|tasks|logs` las de `ops_*` (solo lectura; `--project`, `--env`, `--service`, `--status`, `--since-minutes`, `--filter`, `--limit`, `--json`; `--env` es obligatorio en services/tasks/logs; sale con código 1 si falla). Ejemplo: `shardev ops logs --project demo --env staging --service demo-staging-app --since-minutes 30 --filter ERROR`. Ejemplo: `shardev app plan --project-path ~/projects/acme --key supp --user-type new --json` y luego `shardev app create --plan-id plan_...`.
 
 ### Para contribuir
 
@@ -78,7 +81,7 @@ aws_profiles:
 - Producción con un perfil que no está en `aws_profiles` => `disabled` (fail closed). `policy.yaml` inválido => todo `disabled`.
 - Sin sesión AWS => "operaciones AWS no disponibles" con el comando exacto (`aws sso login --profile X`); el servidor nunca intenta iniciar sesión.
 - Cuenta autenticada distinta de la de `ops.yaml` (o de la del perfil en la policy) => rechazo.
-- `command-only`: devuelve el comando exacto para que lo ejecutes tú; no ejecuta nada.
+- `command-only`: los **cambios** no se ejecutan (se devuelve el comando exacto para que lo ejecutes tú). No bloquea las lecturas fijas de solo lectura `ops_services`, `ops_tasks` y `ops_logs`, que corren también en producción. `disabled`, sin sesión y cuenta distinta siguen bloqueando todo antes de llamar a ECS/CloudWatch.
 - `gated-apply`: se lee, pero **no está implementado**; actúa como `command-only` y lo indica en el resultado.
 
 ### `<proyecto>/ops.yaml`
@@ -98,9 +101,12 @@ environments:
     account_id: "111111111111"
     region: us-east-1
     cluster: shared
+    services: [demo-staging-app, demo-staging-worker]   # opcional, requerido por las lecturas ECS/logs
 ```
 
-`env` nunca tiene valor por defecto. `is_production` es obligatorio. Los servicios ECS deben empezar por `service_prefix` (el cluster es compartido entre proyectos).
+`env` nunca tiene valor por defecto. `is_production` es obligatorio. Los servicios ECS deben empezar por `service_prefix` (el cluster es compartido entre proyectos). Con cluster y cuenta compartidos un prefijo no separa entornos (el `demo-` de producción también cubre `demo-staging-app`), así que `ops_services`, `ops_tasks` y `ops_logs` solo operan sobre servicios que empiecen por el prefijo **y** estén listados exactamente en `services` de ese entorno; sin `services` fallan cerrado (no hay descubrimiento con `list-services`). `capabilities` se aplica: `ecs` para `ops_services`/`ops_tasks`, `logs` para `ops_logs`. Los logs de un servicio se leen del grupo `/ecs/<servicio>` (convención fija). Ver `docs/decisions/0007-ops-lectura-aws.md`.
+
+**Compatibilidad al actualizar:** el esquema de entornos es estricto, así que una versión anterior de `shardev` rechaza un `ops.yaml` con `services` (`Unrecognized key`). Actualiza el CLI **antes** de añadir `services`.
 
 ### `~/.config/shardev-mcp/projects.yaml`
 
@@ -142,6 +148,7 @@ El destino de `project_plan`/`project_create` y el `project_path` de `app_plan` 
 - `exec`: solo arrays de argumentos (sin shell), timeout, entorno explícito (PATH, HOME, AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE + adiciones por llamada) y stdin cerrado.
 - `redact`: enmascara formas conocidas de secretos (sk-ant-, AIza, GOCSPX-, AKIA, tokens de GitHub, JWT, Bearer, claves privadas), `NOMBRE=valor` con nombre de apariencia secreta (incluidas comillas: `export X_TOKEN="a b"`) `nombre: valor` (YAML y logs, con o sin comillas) con nombre de apariencia secreta, credenciales en URLs (`mysql://user:[REDACTED]@host`, se conservan usuario y host) y literales registrados. Limitaciones: es heurístico y prefiere enmascarar de más; no detecta secretos sin forma conocida ni nombre sospechoso (p. ej. un valor suelto en una línea sola), valores multilínea de YAML (`|`, `>`) ni secretos codificados/partidos.
 - Logs completos (ya redactados) en `~/.local/state/shardev-mcp/logs` (dir 0700, archivos 0600); los resultados solo llevan resumen, exit code y `log_ref`. `log_read` rechaza cualquier referencia que no sea un nombre de archivo generado (sin `/`, `..`, ni symlinks).
+- Lecturas AWS: solo `ecs describe-services`, `ecs list-tasks`, `ecs describe-tasks` y `logs filter-log-events` (más `sts get-caller-identity`), siempre como array de argumentos con `--profile`, `--region`, `--output json` y `--no-cli-pager`; el contenido de logs nunca vuelve en el resultado.
 - Auditoría append-only en `~/.local/state/shardev-mcp/audit.jsonl` (tool, proyecto, env, tier, decisión, exit code, duración; argumentos redactados).
 - stdout es el canal del protocolo; los logs del servidor van a stderr.
 

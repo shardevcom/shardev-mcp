@@ -73,6 +73,26 @@ export const LOG_READ = register({
   usesAws: false,
 });
 
+// Lectura AWS (ECS/CloudWatch), solo operaciones fijas de lectura; ver docs/decisions/0007-ops-lectura-aws.md.
+export const OPS_SERVICES = register({
+  name: "ops_services",
+  tier: "T1",
+  summary: "Estado de los servicios ECS declarados de un entorno (ecs describe-services), con lista blanca de campos.",
+  usesAws: true,
+});
+export const OPS_TASKS = register({
+  name: "ops_tasks",
+  tier: "T1",
+  summary: "Tareas ECS (RUNNING o STOPPED, máx. 20) de un servicio declarado; nunca devuelve overrides ni variables de entorno.",
+  usesAws: true,
+});
+export const OPS_LOGS = register({
+  name: "ops_logs",
+  tier: "T1",
+  summary: "Busca eventos en /ecs/<servicio> (filter-log-events); guarda el contenido redactado y devuelve solo resumen y log_ref.",
+  usesAws: true,
+});
+
 // Fase 3: generador (cambian solo el sistema de archivos local; nunca AWS).
 export const PROJECT_PLAN = register({
   name: "project_plan",

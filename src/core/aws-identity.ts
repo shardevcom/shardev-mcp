@@ -8,7 +8,7 @@ export type IdentityResult =
 
 export const loginCommandFor = (profile: string): string => `aws sso login --profile ${profile}`;
 
-const NO_SESSION_RE =
+export const NO_SESSION_RE =
   /(token has expired|expired|sso session|sso token|unable to locate credentials|no credentials|refresh failed|error loading sso|login|invalid(?:client)?token|security token.*invalid)/i;
 const PROFILE_MISSING_RE = /profile .*could not be found/i;
 

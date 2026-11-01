@@ -3,6 +3,9 @@ import { ShardevError } from "./core/errors.js";
 import { defaultPaths } from "./core/paths.js";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
 import { appCreate, appPlan } from "./ops/app.js";
+import { opsServices, opsTasks } from "./ops/ecs.js";
+import { opsLogs } from "./ops/logs.js";
+import { opsStatus } from "./ops/status.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 
 export const CLI_NAME = "shardev";
@@ -18,12 +21,20 @@ Uso:
   ${CLI_NAME} app plan --project-path <dir> --key <key> --user-type <new|existing> [--provider <p>] [--table <t>]
         [--model <M>] [--api-guard <g>] [--session-guard <g>] [--port <n>] [--build-dir <d>] [--features otp,social,mfa,invitations] [--social-providers google,microsoft,apple] [--auto-register] [--json]
   ${CLI_NAME} app create --plan-id <plan_id> [--json]
+  ${CLI_NAME} ops status [--project <nombre>] [--env <entorno>] [--json]
+  ${CLI_NAME} ops services --project <nombre> --env <entorno> [--service <servicio>] [--json]
+  ${CLI_NAME} ops tasks --project <nombre> --env <entorno> --service <servicio> [--status RUNNING|STOPPED] [--json]
+  ${CLI_NAME} ops logs --project <nombre> --env <entorno> --service <servicio> [--since-minutes <1-1440>] [--filter <texto>] [--limit <1-1000>] [--json]
   ${CLI_NAME} --version | --help
 
 project plan/create/verify usan las mismas funciones que las herramientas MCP project_plan,
 project_create y project_verify (misma política, mismas raíces permitidas, misma auditoría).
 app plan/create usan las mismas funciones que las herramientas app_plan y app_create (añadir una app a un
 proyecto ya generado; --features admite otp, social, mfa e invitations; mfa no se combina con otp ni social).
+ops status|services|tasks|logs usan las mismas funciones que las herramientas ops_status, ops_services, ops_tasks y
+ops_logs (solo lectura; misma política y auditoría). --env es obligatorio en services/tasks/logs (sin default) y los
+servicios deben estar declarados en \`services\` del entorno en ops.yaml. ops logs no imprime el contenido: lo guarda
+redactado y muestra el log_ref para leerlo con la herramienta log_read.
 Con --json la salida es exactamente el JSON de la herramienta; el código de salida es 1 si falla.
 `;
 
@@ -38,7 +49,7 @@ interface Parsed {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers"]);
+const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit"]);
 
 function parseArgs(argv: string[]): Parsed {
   const positional: string[] = [];
@@ -151,5 +162,80 @@ export async function runApp(argv: string[], io: CliIo, ctx: Ctx = createContext
     throw new ShardevError("invalid_input", `Subcomando de app desconocido: ${cmd ?? "(ninguno)"}`);
   }
   io.out(`${json ? outcome.text : human(cmd, outcome)}\n`);
+  return outcome.isError ? 1 : 0;
+}
+
+function intFlag(p: Parsed, name: string): number | undefined {
+  const v = p.flags.get(name);
+  if (v === undefined) return undefined;
+  if (typeof v !== "string" || !/^\d+$/.test(v)) throw new ShardevError("invalid_input", `--${name} debe ser un número entero`);
+  return Number(v);
+}
+
+function strFlag(p: Parsed, name: string): string | undefined {
+  const v = p.flags.get(name);
+  if (v === undefined) return undefined;
+  if (typeof v !== "string") throw new ShardevError("invalid_input", `--${name} necesita un valor`);
+  return v;
+}
+
+/** Salida humana breve de las lecturas AWS; con --json se imprime el JSON de la herramienta tal cual. */
+function humanOps(cmd: string, o: ToolOutcome): string {
+  if (o.isError) return o.text;
+  let j: Record<string, unknown>;
+  try {
+    j = JSON.parse(o.text) as Record<string, unknown>;
+  } catch {
+    return o.text;
+  }
+  const list = (v: unknown): Array<Record<string, unknown>> => (Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []);
+  if (cmd === "services") {
+    return list(j.services)
+      .map((s) => `${String(s.service)}  ${String(s.status)}  ${String(s.running)}/${String(s.desired)} (pend. ${String(s.pending)})  ${String(s.task_definition)}`)
+      .concat(list(j.failures).map((f) => `FALLO ${String(f.service)}: ${String(f.reason)}`))
+      .join("\n") || "(sin servicios)";
+  }
+  if (cmd === "tasks") {
+    const rows = list(j.tasks).map((t) => `${String(t.task)}  ${String(t.lastStatus)}->${String(t.desiredStatus)}  ${String(t.task_definition)}  inicio ${String(t.startedAt)}${t.stopCode ? `  stop ${String(t.stopCode)}` : ""}`);
+    return (rows.length ? rows : ["(sin tareas)"]).concat(j.truncated ? ["(truncado a 20 tareas)"] : []).join("\n");
+  }
+  if (cmd === "logs") {
+    return [
+      `eventos: ${String(j.event_count)}${j.truncated ? " (truncado)" : ""}`,
+      `rango: ${String(j.first_timestamp)} .. ${String(j.last_timestamp)}`,
+      `log_ref: ${String(j.log_ref)}`,
+      String(j.como_leerlo),
+    ].join("\n");
+  }
+  return o.text;
+}
+
+/** Ejecuta `shardev ops ...` (solo lectura). Devuelve el código de salida. */
+export async function runOps(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
+  const p = parseArgs(argv);
+  const cmd = p.positional[0];
+  const json = p.flags.get("json") === true;
+  const project = strFlag(p, "project");
+  const env = strFlag(p, "env");
+  let outcome: ToolOutcome;
+  if (cmd === "status") {
+    outcome = await opsStatus(ctx, { project, env });
+  } else if (cmd === "services") {
+    outcome = await opsServices(ctx, { project: need(p, "project"), env: need(p, "env"), service: strFlag(p, "service") });
+  } else if (cmd === "tasks") {
+    outcome = await opsTasks(ctx, { project: need(p, "project"), env: need(p, "env"), service: need(p, "service"), status: strFlag(p, "status") });
+  } else if (cmd === "logs") {
+    outcome = await opsLogs(ctx, {
+      project: need(p, "project"),
+      env: need(p, "env"),
+      service: need(p, "service"),
+      since_minutes: intFlag(p, "since-minutes"),
+      filter: strFlag(p, "filter"),
+      limit: intFlag(p, "limit"),
+    });
+  } else {
+    throw new ShardevError("invalid_input", `Subcomando de ops desconocido: ${cmd ?? "(ninguno)"}`);
+  }
+  io.out(`${json || cmd === "status" ? ctx.redactor.redact(outcome.text) : ctx.redactor.redact(humanOps(cmd, outcome))}\n`);
   return outcome.isError ? 1 : 0;
 }

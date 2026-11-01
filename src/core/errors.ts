@@ -6,6 +6,8 @@ export type ErrorCode =
   | "env_required"
   | "unknown_environment"
   | "foreign_service"
+  | "services_not_declared"
+  | "capability_missing"
   | "invalid_log_ref"
   | "log_not_found"
   | "exec_failed"
