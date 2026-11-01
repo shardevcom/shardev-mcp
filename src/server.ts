@@ -110,7 +110,7 @@ export function createServer(options: { paths?: Paths; runner?: Runner; template
     {
       ...common(OPS_LOGS),
       description:
-        "Busca eventos en el grupo de logs /ecs/<servicio> (solo lectura, logs filter-log-events). El contenido NO vuelve en el resultado: se guarda redactado y se devuelve solo conteo, rango de tiempo y `log_ref` para leerlo con log_read. Se borran los logs de esta herramienta con más de 7 días. Requiere la capacidad `logs`.",
+        "Busca eventos en el grupo de logs <log_group_prefix><servicio>, por defecto /ecs/<servicio> (solo lectura, logs filter-log-events). El contenido NO vuelve en el resultado: se guarda redactado y se devuelve solo conteo, rango de tiempo y `log_ref` para leerlo con log_read. Se borran los logs de esta herramienta con más de 7 días. Requiere la capacidad `logs`.",
       inputSchema: {
         project: PROJECT,
         env: ENV_REQUIRED,
