@@ -12,6 +12,9 @@ import { toast } from 'sonner';
 import { initAuth, setAuth, setLoading, type AuthState } from '@{{ app.key }}/reducers/slices/authSlice';
 import { ROUTE } from '@{{ app.key }}/routes/paths';
 import type { UserAuth } from '@{{ app.key }}/types';
+{{#if app.feature.mfa}}
+import type { MfaPending } from '@{{ app.key }}/types';
+{{/if}}
 import { wipeSessionStorage } from '@{{ app.key }}/utils/clearAuthStorage';
 
 export const useAuth = () => {
@@ -22,6 +25,32 @@ export const useAuth = () => {
     const navigate = useNavigate();
     const permissions = usePermissions<UserAuth>();
 
+{{#if app.feature.mfa}}
+    const login = useCallback(
+        async (email: string, password: string): Promise<true | MfaPending> => {
+            dispatch(setLoading(true));
+            try {
+                // `auth/signin` devuelve un desafío (sin token) si la cuenta tiene verificación en dos pasos.
+                const response = await api.insert<UserAuth | MfaPending, { email: string; password: string }>('auth/signin', { email, password });
+                if (!response.success || !response.data) {
+                    throw new Error(response.message || 'Credenciales inválidas');
+                }
+                if ('mfa_required' in response.data) {
+                    return response.data;
+                }
+                dispatch(setAuth(response.data));
+                navigate(ROUTE.HOME);
+                return true;
+            } catch (error) {
+                throw new Error(ProcessApiResponse<UserAuth>(error).message || 'Credenciales inválidas');
+            } finally {
+                dispatch(setLoading(false));
+            }
+        },
+        [api, dispatch, navigate],
+    );
+{{/if}}
+{{#if !app.feature.mfa}}
     const login = useCallback(
         async (email: string, password: string): Promise<boolean> => {
             dispatch(setLoading(true));
@@ -41,6 +70,7 @@ export const useAuth = () => {
         },
         [api, dispatch, navigate],
     );
+{{/if}}
 
     const logout = useCallback(async () => {
         // Revocación en el servidor (mejor esfuerzo): el token deja de valer aunque se conserve.

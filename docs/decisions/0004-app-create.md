@@ -6,7 +6,7 @@ Fecha: 2026-11-01. Alcance: el mecanismo central para añadir una app frontend a
 
 `app_plan` (MCP) / `shardev app plan` calcula, sin escribir el proyecto, lo que haría añadir una app; `app_create` / `shardev app create` aplica un `plan_id`. Ambos son T2 (cambio local, sin AWS) y comparten implementación con la CLI (`src/gen/app.ts`, `src/ops/app.ts`, `src/cli-run.ts`), igual que `project_*`.
 
-Entrada de `app_plan`: `project_path` (dentro de `allowed_roots`), `key`, `user_type` (`new`|`existing`) y, opcionales, `provider`, `table`, `model`, `api_guard`, `session_guard`, `port`, `build_dir`, `features`. Los nombres se derivan de la `key` con `deriveApp` (las mismas convenciones que el spec: `supp` => provider/tabla `supps`, modelo `Supp`, guards `supp` + `supp_session`, build `build-supp`). El puerto por defecto es el primero libre desde 5173. `features` se valida contra las capas existentes: una feature sin capa (`mfa`, `invitations`) se rechaza diciendo que la capa todavía no existe, y un nombre desconocido se rechaza por el esquema (ver 0005).
+Entrada de `app_plan`: `project_path` (dentro de `allowed_roots`), `key`, `user_type` (`new`|`existing`) y, opcionales, `provider`, `table`, `model`, `api_guard`, `session_guard`, `port`, `build_dir`, `features`. Los nombres se derivan de la `key` con `deriveApp` (las mismas convenciones que el spec: `supp` => provider/tabla `supps`, modelo `Supp`, guards `supp` + `supp_session`, build `build-supp`). El puerto por defecto es el primero libre desde 5173. `features` se valida contra las capas existentes: una feature sin capa se rechaza diciendo que la capa todavía no existe, y un nombre desconocido se rechaza por el esquema (ver 0005; `mfa` e `invitations` existen desde 0006).
 
 ## Dónde queda registrada la app
 
@@ -63,5 +63,5 @@ Rápida: `tests/app-create.test.ts` (27 + 1 de CLI) con plantillas reales y un r
 - Las plantillas pueden haber cambiado desde que se creó el proyecto: se avisa (`notes`), no se bloquea. Las capas de proyecto no se actualizan, así que una plantilla de app que dependa de un cambio de proyecto posterior fallaría en `project_verify` (no en el plan).
 - `app_create` no hace commit, ni crea rama, ni corre migraciones/composer/pnpm (eso es `project_verify`). Tampoco exige árbol limpio ni git: el proyecto de `project_create` no es un repo. Si lo es, rechaza `master`/`main`.
 - Las claves reservadas no se validan en `project_plan` (fuera de alcance; una app `api` en el spec inicial seguiría pasando).
-- Las features son capas `scope: app` con `when: app.feature.<x>`; el modo `onlyApps` las renderiza sin cambios y el lock admite `features` por app. `otp` y `social` existen (ver 0005); `mfa` e `invitations` siguen sin capa y se rechazan.
+- Las features son capas `scope: app` con `when: app.feature.<x>`; el modo `onlyApps` las renderiza sin cambios y el lock admite `features` por app. `otp` y `social` existen (ver 0005); `mfa` e `invitations` también (ver 0006).
 - `app_plan` no registra el proyecto en `projects.yaml` (eso sigue siendo del dueño); `project_verify` lo necesita.

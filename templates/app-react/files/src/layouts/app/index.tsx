@@ -40,6 +40,13 @@ export default function AppLayout() {
                                 <Link to={ROUTE.ROLES}>Roles</Link>
                             </Button>
                         )}
+{{#if app.feature.invitations}}
+                        {hasPermission('list', 'invitations') && (
+                            <Button asChild variant="ghost" size="sm">
+                                <Link to={ROUTE.INVITATIONS}>Invitaciones</Link>
+                            </Button>
+                        )}
+{{/if}}
                     </nav>
                 )}
                 <div className="ml-auto">

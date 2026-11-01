@@ -9,6 +9,10 @@ const SignIn = React.lazy(() => import('@{{ app.key }}/pages/auth/sign-in'));
 const HomePage = React.lazy(() => import('@{{ app.key }}/pages/home'));
 const ProfilePage = React.lazy(() => import('@{{ app.key }}/pages/profile'));
 const RolesPage = React.lazy(() => import('@{{ app.key }}/pages/roles'));
+{{#if app.feature.invitations}}
+const InvitationsPage = React.lazy(() => import('@{{ app.key }}/pages/invitations'));
+const AcceptInvitationPage = React.lazy(() => import('@{{ app.key }}/pages/auth/accept-invitation'));
+{{/if}}
 const NotFoundPage = React.lazy(() => import('@{{ app.key }}/pages/not-found'));
 
 // Redirigir aquí es comodidad de UX. La autorización real la hace el backend en cada petición.
@@ -29,6 +33,14 @@ export const routes: RouteConfig[] = [
                 element: () => <RolesPage />,
                 redirectLogic: (adapter: PermissionAdapter<UserAuth>) => needSession(adapter) || (!adapter.can('list', 'roles') ? ROUTE.HOME : false),
             },
+{{#if app.feature.invitations}}
+            {
+                path: 'invitations',
+                id: '{{ app.key }}-invitations',
+                element: () => <InvitationsPage />,
+                redirectLogic: (adapter: PermissionAdapter<UserAuth>) => needSession(adapter) || (!adapter.can('list', 'invitations') ? ROUTE.HOME : false),
+            },
+{{/if}}
             { path: '*', id: '{{ app.key }}-not-found', element: () => <NotFoundPage /> },
         ],
     },
@@ -36,6 +48,14 @@ export const routes: RouteConfig[] = [
         path: '/{{ app.key }}/auth',
         id: '{{ app.key }}-auth',
         element: () => <AuthLayout />,
+{{#if !app.feature.invitations}}
         children: [{ path: 'signin', id: '{{ app.key }}-signin', element: () => <SignIn /> }],
+{{/if}}
+{{#if app.feature.invitations}}
+        children: [
+            { path: 'signin', id: '{{ app.key }}-signin', element: () => <SignIn /> },
+            { path: 'accept-invitation', id: '{{ app.key }}-accept-invitation', element: () => <AcceptInvitationPage /> },
+        ],
+{{/if}}
     },
 ];

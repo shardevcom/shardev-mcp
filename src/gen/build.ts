@@ -34,6 +34,8 @@ export interface PlannedEdit {
   layer: string;
   changed: boolean;
   diff: string;
+  /** json-merge marcado `idempotent` en la capa: que no cambie nada no es un conflicto en app_create. */
+  idempotent?: true;
 }
 export interface PlannedStep extends VerifyStepDef {
   layer: string;
@@ -95,6 +97,15 @@ function appVars(a: AppSpec): Vars {
     otp_mail_class: `App\\Auth\\Otp\\${a.model}LoginCodeMail`,
     social_controller_class: `App\\Auth\\Social\\${a.model}SocialController`,
     social_identity_class: `App\\Auth\\Social\\${a.model}SocialIdentity`,
+    // mfa (app/Auth/Mfa) e invitations (app/Auth/Invitations)
+    mfa_service_class: `App\\Auth\\Mfa\\${a.model}MfaService`,
+    mfa_controller_class: `App\\Auth\\Mfa\\${a.model}MfaController`,
+    mfa_model_class: `App\\Auth\\Mfa\\${a.model}Mfa`,
+    mfa_challenge_class: `App\\Auth\\Mfa\\${a.model}MfaChallenge`,
+    invitation_controller_class: `App\\Auth\\Invitations\\${a.model}InvitationController`,
+    invitation_model_class: `App\\Auth\\Invitations\\${a.model}Invitation`,
+    invitation_service_class: `App\\Auth\\Invitations\\${a.model}InvitationService`,
+    invitation_mail_class: `App\\Auth\\Invitations\\${a.model}InvitationMail`,
     is_new: a.user_type === "new",
     is_existing: a.user_type === "existing",
     social_providers_csv: a.social_providers.join(","),
@@ -127,7 +138,7 @@ const LENIENT = ["project.feature"] as const;
 
 /**
  * Una feature solo se puede pedir si hay al menos una capa que la use (`when: app.feature.<x>`).
- * Así `mfa` e `invitations` siguen rechazadas hasta que exista su capa, sin lista aparte que se desincronice.
+ * Sin lista aparte que se desincronice: una feature sin capa (p. ej. una nueva en APP_FEATURES) se rechaza aquí.
  */
 export function assertFeatureLayers(layers: Layer[], spec: ProjectSpec): void {
   const has = (f: string): boolean => layers.some((l) => l.scope === "app" && l.when?.trim() === `app.feature.${f}`);
@@ -263,7 +274,7 @@ export async function buildOutputs(spec: ProjectSpec, templatesDir: string, base
             after = applyInsert(text, { anchor: render(e.anchor, inst.vars, opts, w), position: e.position, content: render(e.content, inst.vars, opts, w), indent: e.indent }, file);
           }
           const changed = after !== text;
-          edits.push({ file, type: e.type, layer: layer.name, changed, diff: unifiedDiff(file, text, after) });
+          edits.push({ file, type: e.type, layer: layer.name, changed, diff: unifiedDiff(file, text, after), ...(e.type === "json-merge" && e.idempotent ? { idempotent: true as const } : {}) });
           if (changed) {
             overlay.set(file, Buffer.from(after, "utf8"));
             if (!created.has(file) && !edited.has(file)) edited.set(file, { before, layer: layer.name });

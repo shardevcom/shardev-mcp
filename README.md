@@ -2,7 +2,7 @@
 
 Servidor MCP (stdio) y CLI (`shardev`) para crear y operar proyectos Laravel + React + AWS ECS, pensado para reemplazar scripts de shell. Solo ESM, Node >= 22.
 
-**Estado: núcleo del generador.** Dos herramientas de lectura y cinco de generación local (T2, sin AWS). Pendientes (no existen todavía): las features `mfa` e `invitations`, `mobile_add`, las herramientas `ui_*` y cualquier operación que cambie AWS.
+**Estado: núcleo del generador.** Dos herramientas de lectura y cinco de generación local (T2, sin AWS). Pendientes (no existen todavía): `mobile_add`, las herramientas `ui_*` y cualquier operación que cambie AWS.
 
 | Herramienta | Tier | Qué hace |
 |---|---|---|
@@ -11,10 +11,10 @@ Servidor MCP (stdio) y CLI (`shardev`) para crear y operar proyectos Laravel + R
 | `project_plan` | T2 | Planifica un proyecto **nuevo** a partir de un spec: archivos, diffs de edits, comandos de verificación, conflictos y `plan_id` (30 min). No escribe el proyecto. |
 | `project_create` | T2 | Aplica un `plan_id` (nunca un spec): genera en un temporal junto al destino, verifica y renombra atómicamente. |
 | `project_verify` | T2 | Re-verifica un proyecto generado y registrado (pasos de las plantillas + escaneo de secretos). |
-| `app_plan` | T2 | Planifica añadir una app frontend a un proyecto ya generado (`project_path` bajo `allowed_roots` con `.ops/lock.yaml`): `key`, `user_type` (`new`\|`existing`), `provider`, `table`, `model`, `api_guard`, `session_guard`, `port`, `build_dir` (todos derivados de la `key` si faltan) `features` (`otp`, `social`; `mfa` e `invitations` aún se rechazan), `social_providers` (`google`, `microsoft`, `apple`) y `auto_register` (por defecto `false`). Devuelve archivos, diffs de edits, conflictos, notas y un `plan_id` (30 min) atado al estado de los archivos que toca. No escribe el proyecto. |
+| `app_plan` | T2 | Planifica añadir una app frontend a un proyecto ya generado (`project_path` bajo `allowed_roots` con `.ops/lock.yaml`): `key`, `user_type` (`new`\|`existing`), `provider`, `table`, `model`, `api_guard`, `session_guard`, `port`, `build_dir` (todos derivados de la `key` si faltan) `features` (`otp`, `social`, `mfa`, `invitations`; `mfa` no se combina con `otp` ni `social`, `invitations` no se combina con `auto_register`), `social_providers` (`google`, `microsoft`, `apple`) y `auto_register` (por defecto `false`). Devuelve archivos, diffs de edits, conflictos, notas y un `plan_id` (30 min) atado al estado de los archivos que toca. No escribe el proyecto. |
 | `app_create` | T2 | Aplica un `plan_id` de `app_plan` (nunca datos de la app): solo capas de app y edits por ancla; si algo falla restaura y borra todo. Ver `docs/decisions/0004-app-create.md`. |
 
-`templates/` contiene las capas base (laravel, workspace, packages, app-model, app-auth, tests-auth, app-react, app-workspace, env, docker, claude-kit, verify, y las opcionales app-otp, app-social, tests-otp, tests-social, app-react-otp, app-react-social); ver `docs/decisions/0003-plantillas.md`. `project_create` solo corre pasos ligeros; `project_verify` corre además composer, migraciones, tests, pnpm, build y `docker compose config`. `app_plan`/`app_create` añaden una app a un proyecto ya generado sin re-renderizar nada de proyecto (los feature layers `otp` y `social` ya existen, ver `docs/decisions/0005-otp-social.md`; `mfa` e `invitations` llegarán después).
+`templates/` contiene las capas base (laravel, workspace, packages, app-model, app-auth, tests-auth, app-react, app-workspace, env, docker, claude-kit, verify, y las opcionales app-otp, app-social, app-mfa, mfa-deps, app-invitations, tests-otp, tests-social, tests-mfa, tests-invitations, app-react-otp, app-react-social, app-react-mfa, app-react-invitations); ver `docs/decisions/0003-plantillas.md`. `project_create` solo corre pasos ligeros; `project_verify` corre además composer, migraciones, tests, pnpm, build y `docker compose config`. `app_plan`/`app_create` añaden una app a un proyecto ya generado sin re-renderizar nada de proyecto (los feature layers `otp`, `social`, `mfa` e `invitations` existen, ver `docs/decisions/0005-otp-social.md` y `docs/decisions/0006-mfa-invitations.md`).
 
 ## Instalación
 

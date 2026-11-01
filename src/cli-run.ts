@@ -16,14 +16,14 @@ Uso:
   ${CLI_NAME} project create --plan-id <plan_id> [--json]
   ${CLI_NAME} project verify --project <nombre> [--json]
   ${CLI_NAME} app plan --project-path <dir> --key <key> --user-type <new|existing> [--provider <p>] [--table <t>]
-        [--model <M>] [--api-guard <g>] [--session-guard <g>] [--port <n>] [--build-dir <d>] [--features otp,social] [--social-providers google,microsoft,apple] [--auto-register] [--json]
+        [--model <M>] [--api-guard <g>] [--session-guard <g>] [--port <n>] [--build-dir <d>] [--features otp,social,mfa,invitations] [--social-providers google,microsoft,apple] [--auto-register] [--json]
   ${CLI_NAME} app create --plan-id <plan_id> [--json]
   ${CLI_NAME} --version | --help
 
 project plan/create/verify usan las mismas funciones que las herramientas MCP project_plan,
 project_create y project_verify (misma política, mismas raíces permitidas, misma auditoría).
 app plan/create usan las mismas funciones que las herramientas app_plan y app_create (añadir una app a un
-proyecto ya generado; --features admite otp y social; mfa e invitations aún no tienen capa).
+proyecto ya generado; --features admite otp, social, mfa e invitations; mfa no se combina con otp ni social).
 Con --json la salida es exactamente el JSON de la herramienta; el código de salida es 1 si falla.
 `;
 

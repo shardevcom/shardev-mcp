@@ -69,4 +69,20 @@ describe("ProjectSpec", () => {
     expect(resolveProjectSpec(withApp({ features: ["social"], social_providers: ["apple"], auto_register: true })).apps[0]?.auto_register).toBe(true);
     bad(withApp({ auto_register: "yes" }), /Spec inválido/);
   });
+
+  test("mfa no se combina con otp ni social (v1: otros caminos emitirían el token sin segundo factor)", () => {
+    expect(resolveProjectSpec(withApp({ features: ["mfa"] })).apps[0]?.features).toEqual(["mfa"]);
+    bad(withApp({ features: ["mfa", "otp"] }), /app web: la feature mfa no se puede combinar con otp ni social/);
+    bad(withApp({ features: ["mfa", "social"], social_providers: ["google"] }), /la feature mfa no se puede combinar con otp ni social/);
+    // en otra app del mismo proyecto sí puede haber otp: la restricción es por app
+    const mixed = resolveProjectSpec({ ...SPEC, apps: [{ ...SPEC.apps[0], features: ["mfa"] }, { ...SPEC.apps[1], features: ["otp"] }] });
+    expect(mixed.apps.map((a) => a.features)).toEqual([["mfa"], ["otp"]]);
+  });
+
+  test("invitations no se combina con auto_register; sí con otp o social sin auto_register", () => {
+    expect(resolveProjectSpec(withApp({ features: ["invitations"] })).apps[0]?.features).toEqual(["invitations"]);
+    expect(resolveProjectSpec(withApp({ features: ["invitations", "otp"] })).apps[0]?.auto_register).toBe(false);
+    bad(withApp({ features: ["invitations", "otp"], auto_register: true }), /invitations no se puede combinar con auto_register/);
+    bad(withApp({ features: ["invitations", "social"], social_providers: ["google"], auto_register: true }), /invitations no se puede combinar con auto_register/);
+  });
 });

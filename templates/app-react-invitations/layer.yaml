@@ -1,0 +1,8 @@
+name: app-react-invitations
+scope: app
+order: 54
+when: app.feature.invitations
+requires: [app.key]
+files:
+  - { src: files/accept-invitation.tsx, dest: "resources/react/{{ app.key }}/src/pages/auth/accept-invitation/index.tsx" }
+  - { src: files/invitations.tsx, dest: "resources/react/{{ app.key }}/src/pages/invitations/index.tsx" }

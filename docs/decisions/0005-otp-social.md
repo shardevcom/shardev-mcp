@@ -1,6 +1,6 @@
 # 0005 - Features `otp` y `social` (primeras capas opcionales)
 
-Fecha: 2026-11-01. Alcance: las dos primeras capas de feature por app. Fuera de alcance: `mfa`, `invitations`, Capacitor, `ui_*`, AWS, el almacenamiento de tokens de `@shardev/common`, añadir una feature a una app que ya existe.
+Fecha: 2026-11-01. Alcance: las dos primeras capas de feature por app. Fuera de alcance (`mfa` e `invitations` llegaron después, ver 0006): Capacitor, `ui_*`, AWS, el almacenamiento de tokens de `@shardev/common`, añadir una feature a una app que ya existe.
 
 Origen: del proyecto de referencia solo se tomó el comportamiento esperado de un login por código y de un login social; no se copió código.
 
@@ -8,7 +8,7 @@ Origen: del proyecto de referencia solo se tomó el comportamiento esperado de u
 
 `features: ["otp"]`, `["social"]` o ambas, por app, tanto en el spec de `project_create` como en `app_plan`/`app_create` (`--features otp,social --social-providers google,microsoft,apple --auto-register` en la CLI). `social` exige `social_providers` (solo `google`, `microsoft`, `apple`: los que tienen verificador en `integrations`). `auto_register` (por defecto `false`) permite crear la cuenta en el primer login válido de OTP o social; sin `otp` ni `social` es un error.
 
-`mfa` e `invitations` siguen rechazadas con "la capa de la feature ... todavía no existe". Ya no hay una lista aparte de features futuras: una feature se acepta si hay una capa de app con `when: app.feature.<x>`; si no, `buildOutputs` falla. Un nombre desconocido se rechaza por el esquema.
+`mfa` e `invitations` se rechazaron con "la capa de la feature ... todavía no existe" hasta 0006, que las añadió. Ya no hay una lista aparte de features futuras: una feature se acepta si hay una capa de app con `when: app.feature.<x>`; si no, `buildOutputs` falla. Un nombre desconocido se rechaza por el esquema.
 
 ## Capas
 

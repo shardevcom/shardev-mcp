@@ -1,0 +1,17 @@
+name: app-invitations
+scope: app
+order: 38
+when: app.feature.invitations
+requires: [app.key, app.model, app.model_class, app.table, app.api_guard, app.invitation_controller_class, app.invitation_service_class]
+files:
+  - { src: files/InvitationController.php, dest: "app/Auth/Invitations/{{ app.model }}InvitationController.php" }
+  - { src: files/InvitationService.php, dest: "app/Auth/Invitations/{{ app.model }}InvitationService.php" }
+  - { src: files/CreateInvitationRequest.php, dest: "app/Auth/Invitations/{{ app.model }}CreateInvitationRequest.php" }
+  - { src: files/AcceptInvitationRequest.php, dest: "app/Auth/Invitations/{{ app.model }}AcceptInvitationRequest.php" }
+  - { src: files/Invitation.php, dest: "app/Auth/Invitations/{{ app.model }}Invitation.php" }
+  - { src: files/InvitationMail.php, dest: "app/Auth/Invitations/{{ app.model }}InvitationMail.php" }
+  - { src: files/InviteCommand.php, dest: "app/Console/Commands/{{ app.model }}InviteCommand.php" }
+  - { src: files/invitation.blade.php, dest: "resources/views/mail/{{ app.key }}-invitation.blade.php" }
+  - { src: files/migration.php, dest: "database/migrations/2026_01_01_000220_create_{{ app.table }}_invitations_table.php" }
+  - { src: files/config-invitations.php, dest: "config/invitations_{{ app.key }}.php" }
+  - { src: files/routes-invitations.php, dest: "routes/api/{{ app.key }}-invitations.php" }

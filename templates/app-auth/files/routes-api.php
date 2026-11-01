@@ -9,6 +9,11 @@ use Shardevcom\Authentications\Http\Controllers\RoleController;
 | API de la app `{{ app.key }}` -> /api/{{ app.key }}/...  (guard Bearer `{{ app.api_guard }}`).
 | Solo signin es público (con throttle). Lo demás exige un token DE ESTA APP: un token de otra
 | app se rechaza con 401 porque su cliente Passport pertenece a otro provider.
+{{#if app.feature.mfa}}
+|
+| Esta app tiene MFA (feature mfa): `signin` devuelve un desafío en vez del token a las cuentas con segundo
+| factor (ver routes/api/{{ app.key }}-mfa.php).
+{{/if}}
 {{#if app.feature.otp}}
 |
 | Esta app entra por código (feature otp): NO hay signin ni change-password por contraseña (ver

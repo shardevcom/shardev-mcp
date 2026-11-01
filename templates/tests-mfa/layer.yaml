@@ -1,0 +1,7 @@
+name: tests-mfa
+scope: app
+order: 43
+when: app.feature.mfa
+requires: [app.key, app.model, app.model_class, app.table, app.api_guard, app.mfa_model_class, app.mfa_service_class]
+files:
+  - { src: files/MfaTest.php, dest: "tests/Feature/{{ app.model }}MfaTest.php" }

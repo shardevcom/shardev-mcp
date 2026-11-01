@@ -210,7 +210,7 @@ async function computeAppPlan(ctx: Ctx, root: string, req: AppRequest): Promise<
     if (f.secret) conflicts.push(`${f.path}: una capa de app no puede generar secretos locales (capa ${f.layer})`);
   }
   for (const e of out.edits) {
-    if (e.type !== "lock" && !e.changed) conflicts.push(`${e.file}: el edit ${e.type} de la capa ${e.layer} ya estaba aplicado (¿cambios manuales?); no se continúa a ciegas`);
+    if (e.type !== "lock" && !e.changed && !e.idempotent) conflicts.push(`${e.file}: el edit ${e.type} de la capa ${e.layer} ya estaba aplicado (¿cambios manuales?); no se continúa a ciegas`);
   }
 
   // ---- notas informativas (no bloquean) -----------------------------------------------------
@@ -222,7 +222,7 @@ async function computeAppPlan(ctx: Ctx, root: string, req: AppRequest): Promise<
   }
   if (lock.template_hash !== out.template_hash) notes.push("Las plantillas cambiaron desde que se creó el proyecto: la app se genera con las plantillas actuales; las capas de proyecto no se re-renderizan.");
   if (req.user_type === "existing" && modelBuf !== null && !/function\s+newFactory|HasFactory/.test(modelBuf.toString("utf8"))) {
-    notes.push(`${modelFile} no define factory: los tests de aislamiento entre guards no cubrirán esta app (necesitan \`${model}::factory()\`).`);
+    notes.push(`${modelFile} no define factory: los tests de aislamiento entre guards no cubrirán esta app (necesitan \`${model}::factory()\`).${req.features.length > 0 ? " Las pruebas generadas de las features también la usan y fallarán sin ella." : ""}`);
   }
 
   // ---- escaneo en memoria de lo que se va a escribir (archivos nuevos y líneas añadidas) ----------
@@ -300,7 +300,7 @@ export interface AppPlanResult {
   expires_at: string | null;
   app: AppSpec;
   files_to_create: Array<{ path: string; bytes: number; mode: string; layer: string }>;
-  edits: Array<{ file: string; type: string; layer: string; changed: boolean; diff: string }>;
+  edits: Array<{ file: string; type: string; layer: string; changed: boolean; diff: string; idempotent?: true }>;
   commands: Array<{ name: string; command: string; timeout_s: number; env: Record<string, string>; runs_in: "app_create" | "project_verify" }>;
   conflicts: string[];
   notes: string[];

@@ -1,0 +1,8 @@
+name: app-react-mfa
+scope: app
+order: 53
+when: app.feature.mfa
+requires: [app.key]
+files:
+  - { src: files/mfa-challenge.tsx, dest: "resources/react/{{ app.key }}/src/pages/auth/sign-in/mfa-challenge.tsx" }
+  - { src: files/mfa-settings.tsx, dest: "resources/react/{{ app.key }}/src/pages/profile/mfa-settings.tsx" }

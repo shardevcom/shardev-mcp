@@ -29,14 +29,14 @@ interface Env {
 }
 
 /** Proyecto `acme` (web + adm) generado con las plantillas reales y un runner inerte. */
-async function generate(opts: { runner?: Runner; templates?: string } = {}): Promise<Env> {
+async function generate(opts: { runner?: Runner; templates?: string; spec?: unknown } = {}): Promise<Env> {
   const paths = await tempPaths();
   const root = await tempDir();
   const templates = opts.templates ?? DEFAULT_TEMPLATES_DIR;
   await writeFile(join(paths.configDir, "config.yaml"), `allowed_roots:\n  - ${root}\n`);
   const ctx = createContext(paths, { templatesDir: templates, runner: opts.runner ?? stubRunner() });
   const project = join(root, "acme");
-  const plan = await planCreate(ctx, E2E_SPEC, project);
+  const plan = await planCreate(ctx, opts.spec ?? E2E_SPEC, project);
   expect(plan.conflicts).toEqual([]);
   const r = await applyCreate(ctx, plan.plan_id!);
   expect(r.ok, r.message).toBe(true);
@@ -91,14 +91,51 @@ describe("features en el spec del proyecto (project_plan)", () => {
     expect(base.files_to_create.map((f) => f.path)).not.toEqual(expect.arrayContaining(["app/Auth/Otp/UserOtpService.php"]));
   });
 
-  test("mfa e invitations se rechazan con el mensaje de capa inexistente", async () => {
+  test("mfa e invitations se renderizan solo en las apps que las piden; mfa+otp/social e invitations+auto_register se rechazan", async () => {
     const paths = await tempPaths();
     const root = await tempDir();
     await writeFile(join(paths.configDir, "config.yaml"), `allowed_roots:\n  - ${root}\n`);
     const ctx = createContext(paths, { runner: stubRunner() });
-    for (const f of ["mfa", "invitations"]) {
-      await expect(planCreate(ctx, withFeatures({ features: [f] }), join(root, "acme"))).rejects.toThrow(/todavía no existe/);
-    }
+    const plan = await planCreate(ctx, withFeatures({ features: ["mfa", "invitations"] }), join(root, "acme"));
+    expect(plan.conflicts).toEqual([]);
+    const paths3 = plan.files_to_create.map((f) => f.path);
+    expect(paths3).toEqual(
+      expect.arrayContaining([
+        "app/Auth/Mfa/UserMfaService.php",
+        "app/Auth/Mfa/UserMfaController.php",
+        "database/migrations/2026_01_01_000210_create_users_mfa_table.php",
+        "config/mfa_web.php",
+        "routes/api/web-mfa.php",
+        "tests/Feature/UserMfaTest.php",
+        "resources/react/web/src/pages/auth/sign-in/mfa-challenge.tsx",
+        "app/Auth/Invitations/UserInvitationService.php",
+        "app/Console/Commands/UserInviteCommand.php",
+        "database/migrations/2026_01_01_000220_create_users_invitations_table.php",
+        "config/invitations_web.php",
+        "routes/api/web-invitations.php",
+        "tests/Feature/UserInvitationsTest.php",
+        "resources/react/web/src/pages/invitations/index.tsx",
+        "resources/views/mail/web-invitation.blade.php",
+      ]),
+    );
+    expect(paths3.filter((p) => /Admin(Mfa|Invit)|adm-(mfa|invit)|Mfa.*admins|invitations.*admins|resources\/react\/adm\/.*(mfa|invit)/i.test(p))).toEqual([]);
+    expect(plan.layers).toEqual(expect.arrayContaining(["app-mfa", "mfa-deps", "tests-mfa", "app-react-mfa", "app-invitations", "tests-invitations", "app-react-invitations"]));
+    const composer = plan.edits.filter((e) => e.file === "composer.json" && e.layer === "app-mfa");
+    expect(composer).toHaveLength(1);
+    expect(composer[0]!.diff).toContain("pragmarx/google2fa");
+    // la dependencia solo entra con una app mfa
+    const base = await planCreate(ctx, E2E_SPEC, join(root, "acme2"));
+    expect(base.edits.some((e) => e.layer === "app-mfa")).toBe(false);
+    expect(base.files_to_create.map((f) => f.path).filter((p) => /Mfa|Invit|mfa|invit/.test(p))).toEqual([]);
+    expect(base.commands.some((c) => c.name === "composer-sync-mfa")).toBe(false);
+    expect(plan.commands.find((c) => c.name === "composer-sync-mfa")?.runs_in).toBe("project_verify");
+
+    await expect(planCreate(ctx, withFeatures({ features: ["mfa", "otp"] }), join(root, "x1"))).rejects.toThrow(/mfa no se puede combinar con otp ni social/);
+    await expect(planCreate(ctx, withFeatures({ features: ["mfa", "social"], social_providers: ["google"] }), join(root, "x2"))).rejects.toThrow(/mfa no se puede combinar con otp ni social/);
+    await expect(planCreate(ctx, withFeatures({ features: ["invitations", "otp"], auto_register: true }), join(root, "x3"))).rejects.toThrow(/invitations no se puede combinar con auto_register/);
+    // invitations + otp (sin auto_register) sí es válido
+    const ok = await planCreate(ctx, withFeatures({ features: ["invitations", "otp"] }), join(root, "x4"));
+    expect(ok.conflicts).toEqual([]);
   });
 });
 
@@ -194,14 +231,48 @@ describe("app_plan", () => {
     expect(d.isError).toBe(true);
   });
 
-  test("features: mfa e invitations siguen rechazadas (la capa no existe), lo desconocido también, otp y social se aceptan", async () => {
+  test("una 2ª app con mfa en un proyecto que ya tiene mfa no choca con la dependencia ya presente (merge idempotente)", async () => {
+    const spec = { ...E2E_SPEC, apps: [{ ...E2E_SPEC.apps[0], features: ["mfa"] }, E2E_SPEC.apps[1]] };
+    const e = await generate({ spec });
+    const plan = await planApp(e.ctx, input(e, { features: ["mfa"] }));
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.plan_id).toMatch(/^plan_/);
+    const composer = plan.edits.find((x) => x.file === "composer.json");
+    expect(composer).toMatchObject({ changed: false, idempotent: true });
+    const r = await applyApp(e.ctx, plan.plan_id!);
+    expect(r.ok, r.message).toBe(true);
+    const composerJson = JSON.parse(await readFile(join(e.project, "composer.json"), "utf8"));
+    expect(composerJson.require["pragmarx/google2fa"]).toBe("^9.0");
+  });
+
+  test("features: mfa e invitations se aceptan como capas de app; las combinaciones inválidas y lo desconocido se rechazan", async () => {
     const e = await generate();
     expect((await planApp(e.ctx, input(e, { features: [] }))).plan_id).toMatch(/^plan_/);
-    for (const features of [["mfa"], ["invitations"], ["otp", "mfa"], ["inventada"]]) {
-      const r = await appPlan(e.ctx, input(e, { features }));
-      expect(r.isError).toBe(true);
-      expect(r.text).toMatch(/todavía no existe|desconocida/);
+    const cases: Array<[string[], RegExp | null]> = [
+      [["otp", "mfa"], /mfa no se puede combinar con otp ni social/],
+      [["mfa", "social"], /mfa no se puede combinar con otp ni social/],
+      [["invitations", "otp"], null],
+      [["inventada"], /desconocida|Invalid/i],
+    ];
+    for (const [features, re] of cases) {
+      const r = await appPlan(e.ctx, input(e, { features, ...(features.includes("social") ? { social_providers: ["google"] } : {}) }));
+      if (re === null) expect(r.isError).toBe(false);
+      else {
+        expect(r.isError).toBe(true);
+        expect(r.text).toMatch(re);
+      }
     }
+    const withAuto = await appPlan(e.ctx, input(e, { features: ["invitations", "otp"], auto_register: true }));
+    expect(withAuto.isError).toBe(true);
+    expect(withAuto.text).toMatch(/invitations no se puede combinar con auto_register/);
+    const mfa = await planApp(e.ctx, input(e, { features: ["mfa", "invitations"] }));
+    expect(mfa.plan_id).toMatch(/^plan_/);
+    expect(mfa.files_to_create.map((f) => f.path)).toEqual(
+      expect.arrayContaining(["app/Auth/Mfa/SuppMfaService.php", "database/migrations/2026_01_01_000210_create_supps_mfa_table.php", "routes/api/supp-mfa.php", "tests/Feature/SuppMfaTest.php", "app/Auth/Invitations/SuppInvitationService.php", "database/migrations/2026_01_01_000220_create_supps_invitations_table.php", "tests/Feature/SuppInvitationsTest.php"]),
+    );
+    // app_create nunca re-renderiza capas de proyecto: la dependencia entra por el merge JSON de la capa de app
+    expect(mfa.edits.find((x) => x.file === "composer.json")?.diff).toContain("pragmarx/google2fa");
+    expect(mfa.edits.find((x) => x.file === "config/shardevcom.php" && x.diff.includes("invitations"))).toBeDefined();
     const otp = await planApp(e.ctx, input(e, { features: ["otp"] }));
     expect(otp.plan_id).toMatch(/^plan_/);
     expect(otp.files_to_create.map((f) => f.path)).toEqual(expect.arrayContaining(["app/Auth/Otp/SuppOtpService.php", "routes/api/supp-otp.php", "tests/Feature/SuppOtpLoginTest.php"]));
@@ -535,7 +606,7 @@ describe("shardev app (CLI)", () => {
     return { out, io: { out: (s: string) => out.push(s), err: () => undefined, stdin: async () => "" } };
   };
 
-  test("plan --json y create comparten resultado con las funciones de ops; --features acepta otp/social y rechaza mfa", async () => {
+  test("plan --json y create comparten resultado con las funciones de ops; --features acepta otp/social/mfa/invitations y rechaza combinaciones inválidas", async () => {
     const { runApp } = await import("../src/cli-run.js");
     const e = await generate();
     const a = io();
@@ -545,8 +616,8 @@ describe("shardev app (CLI)", () => {
     expect(plan.app.port).toBe(5300);
 
     const bad = io();
-    expect(await runApp(["plan", "--project-path", e.project, "--key", "supp2", "--user-type", "new", "--features", "mfa", "--json"], bad.io, e.ctx)).toBe(1);
-    expect(bad.out.join("")).toMatch(/todavía no existe/);
+    expect(await runApp(["plan", "--project-path", e.project, "--key", "supp2", "--user-type", "new", "--features", "mfa,otp", "--json"], bad.io, e.ctx)).toBe(1);
+    expect(bad.out.join("")).toMatch(/mfa no se puede combinar con otp ni social/);
 
     const b = io();
     expect(await runApp(["create", "--plan-id", plan.plan_id, "--json"], b.io, e.ctx)).toBe(0);

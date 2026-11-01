@@ -1,0 +1,24 @@
+name: app-mfa
+scope: app
+order: 37
+when: app.feature.mfa
+requires: [app.key, app.model, app.model_class, app.table, app.api_guard, app.mfa_controller_class]
+files:
+  - { src: files/MfaController.php, dest: "app/Auth/Mfa/{{ app.model }}MfaController.php" }
+  - { src: files/MfaService.php, dest: "app/Auth/Mfa/{{ app.model }}MfaService.php" }
+  - { src: files/MfaVerifyRequest.php, dest: "app/Auth/Mfa/{{ app.model }}MfaVerifyRequest.php" }
+  - { src: files/MfaCodeRequest.php, dest: "app/Auth/Mfa/{{ app.model }}MfaCodeRequest.php" }
+  - { src: files/MfaPasswordCodeRequest.php, dest: "app/Auth/Mfa/{{ app.model }}MfaPasswordCodeRequest.php" }
+  - { src: files/Mfa.php, dest: "app/Auth/Mfa/{{ app.model }}Mfa.php" }
+  - { src: files/MfaChallenge.php, dest: "app/Auth/Mfa/{{ app.model }}MfaChallenge.php" }
+  - { src: files/migration.php, dest: "database/migrations/2026_01_01_000210_create_{{ app.table }}_mfa_table.php" }
+  - { src: files/config-mfa.php, dest: "config/mfa_{{ app.key }}.php" }
+  - { src: files/routes-mfa.php, dest: "routes/api/{{ app.key }}-mfa.php" }
+edits:
+  # app_create nunca re-renderiza capas de proyecto: la dependencia entra por merge JSON (idempotente entre apps).
+  - type: json-merge
+    file: composer.json
+    idempotent: true # la 2ª app con mfa ya encuentra la dependencia: no es un conflicto en app_create
+    value:
+      require:
+        pragmarx/google2fa: "^9.0"

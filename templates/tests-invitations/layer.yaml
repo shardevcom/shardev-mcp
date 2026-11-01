@@ -1,0 +1,7 @@
+name: tests-invitations
+scope: app
+order: 44
+when: app.feature.invitations
+requires: [app.key, app.model, app.model_class, app.table, app.api_guard, app.invitation_mail_class]
+files:
+  - { src: files/InvitationsTest.php, dest: "tests/Feature/{{ app.model }}InvitationsTest.php" }

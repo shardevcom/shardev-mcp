@@ -8,6 +8,9 @@ import { Input } from '@{{ app.key }}/components/ui/input';
 import { Label } from '@{{ app.key }}/components/ui/label';
 import { useAuth } from '@{{ app.key }}/hooks/auth';
 import { setAuth } from '@{{ app.key }}/reducers/slices/authSlice';
+{{#if app.feature.mfa}}
+import MfaSettings from '@{{ app.key }}/pages/profile/mfa-settings';
+{{/if}}
 import type { UserAuth } from '@{{ app.key }}/types';
 
 /** Perfil de la cuenta autenticada: el backend lo resuelve del token, nunca de un id enviado desde aquí. */
@@ -104,6 +107,9 @@ export default function ProfilePage() {
                     </Button>
                 </CardContent>
             </Card>
+{{/if}}
+{{#if app.feature.mfa}}
+            <MfaSettings />
 {{/if}}
         </div>
     );

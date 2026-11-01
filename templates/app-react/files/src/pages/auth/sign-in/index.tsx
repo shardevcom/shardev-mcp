@@ -16,6 +16,11 @@ import { Input } from '@{{ app.key }}/components/ui/input';
 import { Label } from '@{{ app.key }}/components/ui/label';
 import { useAuth } from '@{{ app.key }}/hooks/auth';
 {{/if}}
+{{#if app.feature.mfa}}
+import { useState } from 'react';
+import MfaChallengeForm from '@{{ app.key }}/pages/auth/sign-in/mfa-challenge';
+import type { MfaPending } from '@{{ app.key }}/types';
+{{/if}}
 {{#if app.feature.otp}}
 import OtpForm from '@{{ app.key }}/pages/auth/sign-in/otp-form';
 {{/if}}
@@ -32,6 +37,9 @@ type Values = z.infer<typeof schema>;
 
 export default function SignIn() {
     const { login, loading } = useAuth();
+{{#if app.feature.mfa}}
+    const [pending, setPending] = useState<MfaPending | null>(null);
+{{/if}}
     const {
         register,
         handleSubmit,
@@ -41,12 +49,34 @@ export default function SignIn() {
 
     const onSubmit = async (values: Values) => {
         try {
+{{#if app.feature.mfa}}
+            const result = await login(values.email, values.password);
+            if (result !== true) setPending(result);
+{{/if}}
+{{#if !app.feature.mfa}}
             await login(values.email, values.password);
+{{/if}}
         } catch (error) {
             setError('root.serverError', { type: 'server', message: error instanceof Error ? error.message : 'No se pudo iniciar sesión' });
         }
     };
 
+{{#if app.feature.mfa}}
+    if (pending) {
+        return (
+            <Card>
+                <CardHeader className="text-center">
+                    <CardTitle className="text-xl">Verificación en dos pasos</CardTitle>
+                    <CardDescription>{{ project.name }} / {{ app.key }}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <MfaChallengeForm challenge={pending.challenge} onCancel={() => setPending(null)} />
+                </CardContent>
+            </Card>
+        );
+    }
+
+{{/if}}
     return (
         <Card>
             <CardHeader className="text-center">

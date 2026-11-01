@@ -56,4 +56,7 @@ edits:
           'home' => ['admin' => ['manage'], 'user' => ['view']],
           'roles' => ['admin' => ['manage']],
           'permissions' => ['admin' => ['manage']],
+      {{#if app.feature.invitations}}
+          'invitations' => ['admin' => ['list', 'create', 'remove']],
+      {{/if}}
       ],

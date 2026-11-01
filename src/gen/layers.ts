@@ -30,7 +30,19 @@ const FileEntry = z
 
 const EditBase = { file: z.string().min(1) };
 const EditSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("json-merge"), ...EditBase, value: z.record(z.string(), z.unknown()) }).strict(),
+  z
+    .object({
+      type: z.literal("json-merge"),
+      ...EditBase,
+      value: z.record(z.string(), z.unknown()),
+      /**
+       * Un merge ya aplicado NO es un conflicto en `app_create` (que normalmente rechaza un edit que no cambia nada:
+       * suele ser un cambio manual). Para dependencias compartidas por varias apps (la 2ª app con la feature ya
+       * encuentra la dependencia). Un valor distinto sigue siendo conflicto.
+       */
+      idempotent: z.boolean().default(false),
+    })
+    .strict(),
   z.object({ type: z.literal("yaml-append"), ...EditBase, path: z.array(z.string().min(1)).min(1), value: z.unknown() }).strict(),
   z
     .object({

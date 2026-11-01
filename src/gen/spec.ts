@@ -132,6 +132,15 @@ export function resolveProjectSpec(input: unknown): ProjectSpec {
     if (social && a.social_providers.length === 0) issues.push(`app ${a.key}: la feature social requiere social_providers`);
     if (!social && a.social_providers.length > 0) issues.push(`app ${a.key}: social_providers sin la feature social`);
     if (a.auto_register && !social && !a.features.includes("otp")) issues.push(`app ${a.key}: auto_register solo tiene sentido con la feature otp o social`);
+    // v1: mfa solo protege el login por contraseña. Con otp o social habría otro camino que emite el token sin
+    // segundo factor (el código por correo o el id_token ya son el único factor de esos caminos).
+    if (a.features.includes("mfa") && (social || a.features.includes("otp"))) {
+      issues.push(`app ${a.key}: la feature mfa no se puede combinar con otp ni social en la misma app (v1: otp y social emitirían el token sin pasar por el segundo factor)`);
+    }
+    // La auto-creación de cuentas en el primer login anula el alta cerrada que garantiza invitations.
+    if (a.features.includes("invitations") && a.auto_register) {
+      issues.push(`app ${a.key}: la feature invitations no se puede combinar con auto_register (el auto-registro anula el alta solo por invitación)`);
+    }
   }
   const mobile = r.data.mobile;
   if (mobile && !apps.some((a) => a.key === mobile.app)) issues.push(`mobile.app "${mobile.app}" no es una app declarada`);

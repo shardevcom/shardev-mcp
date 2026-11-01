@@ -1,0 +1,18 @@
+name: mfa-deps
+scope: app
+order: 899
+when: app.feature.mfa
+# Sin archivos: solo el paso de verificación que sincroniza composer.lock con la dependencia que añade `app-mfa`
+# (pragmarx/google2fa). Corre ANTES de `composer-install` (capa verify, orden 900): `app_create` añade la dependencia
+# a un proyecto que ya tiene composer.lock, y `composer install` con un lock desactualizado falla ("Required
+# package ... is not present in the lock file"). Sin lock, `composer update <paquete>` también falla ("Cannot update
+# only a partial set of packages without a lock file"), así que se elige según haya lock o no.
+verify:
+  - name: composer-sync-mfa
+    argv:
+      - sh
+      - -c
+      - if [ -f composer.lock ]; then composer update pragmarx/google2fa --with-dependencies --no-interaction --prefer-dist; else composer install --no-interaction --prefer-dist; fi
+    timeout_s: 900
+    full: true
+    env: { COMPOSER_NO_AUDIT: "1" }

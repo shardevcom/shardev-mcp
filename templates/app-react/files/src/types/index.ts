@@ -23,3 +23,13 @@ export interface Role {
     created_at?: string;
     updated_at?: string;
 }
+{{#if app.feature.mfa}}
+
+/** Respuesta de `auth/signin` para una cuenta con verificación en dos pasos: un desafío opaco, nunca un token. */
+export interface MfaPending {
+    mfa_required: true;
+    challenge: string;
+    expires_in: number;
+    methods: string[];
+}
+{{/if}}
