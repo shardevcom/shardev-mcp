@@ -12,7 +12,7 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 
 | ID | Tarea | Por qué | Esfuerzo |
 |---|---|---|---|
-| ADJ-02 | Probar `log_read` sobre logs reales y medir la redacción | Solo se probó con datos simulados | Bajo |
+| ADJ-02 | Medir la redacción con logs reales que contengan datos sensibles | La lectura real ya funciona, pero las muestras no tenían nada que enmascarar, así que no prueban la redacción | Bajo |
 | ADJ-09 | Registrar en auditoría las ejecuciones por CLI, o corregir la ayuda que afirma que ya se registran | Solo el servidor MCP escribe en `audit.jsonl`; es requisito antes de BASE-01, porque las operaciones T3 las ejecuta una persona por CLI | Bajo |
 
 ## 2. Base de cambios

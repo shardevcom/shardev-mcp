@@ -71,3 +71,9 @@ Además de la redacción de secretos, el contenido de `ops_logs` se enmascara **
 ## Prueba real por el protocolo MCP (2026-11-01)
 
 Con un cliente MCP por stdio contra `shardev mcp serve` y AWS real, en un entorno de staging y otro de producción: `ops_services`, `ops_tasks`, `ops_logs` y `log_read` respondieron correctamente, y también `ops_env_check`, `ops_ci_check` y `ops_ci_generate`. En producción, `ops_ci_generate` no escribió nada. Se rechazaron un servicio de otro entorno y la llamada sin `env`, esta última por validación del esquema MCP antes de llegar a la herramienta. La auditoría registró las llamadas.
+
+## Medición con logs reales: sin conclusión (2026-11-01)
+
+Se leyeron con `log_read` copias reales de `ops_logs` de un entorno de staging y otro de producción, midiendo solo conteos. Las muestras de 1000 eventos eran muy repetitivas (de 2 a 8 formas de línea distintas). No hubo ningún enmascarado (`[REDACTED]`, `[EMAIL]`, `[NUMERO]`) ni restos detectados de correos, números largos, JWT, Bearer, claves de acceso o contraseñas.
+
+Esto confirma que la lectura funciona y que el aviso de contenido no confiable aparece, pero **no demuestra que la redacción funcione con datos reales**: esas muestras no tenían nada que redactar. Por eso ADJ-02 sigue abierta.
