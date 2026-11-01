@@ -6,7 +6,7 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 
 ## Ya disponible
 
-`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `shardev ops status|services|tasks|logs|log-read`, `project_*` y `app_*`.
+`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `ops_env_check` (ENV-01: validación local de un entorno, sin AWS; `root` opcional en `projects.yaml`), `shardev ops status|services|tasks|logs|env-check|log-read`, `project_*` y `app_*`.
 
 ## 1. Ajustes a lo existente
 
@@ -31,7 +31,6 @@ Requisito de todas las operaciones que modifican AWS.
 
 | ID | Acción | Nivel | Notas | Esfuerzo |
 |---|---|---|---|---|
-| ENV-01 | Validar la configuración de un entorno | T0 | Sin conexión | Bajo |
 | ENV-02 | Crear un entorno a partir de otro | T2 | Genera contraseñas nuevas; rechaza producción como destino | Medio |
 | ENV-03 | Dividir un `.env` en configuración y secretos | T2 | Con copia de seguridad | Bajo |
 | ENV-04 | Adoptar o crear un perfil AWS | T2 | Nunca borra una credencial que no se haya guardado antes | Medio |
@@ -65,7 +64,7 @@ Requisito de todas las operaciones que modifican AWS.
 
 ## Orden recomendado
 
-1. ADJ-01 y ADJ-02, ENV-01 y CI-01.
+1. ADJ-01 y ADJ-02, y CI-01.
 2. BASE-01, BASE-02 y SVC-01 como primera operación que cambia AWS; luego SVC-02.
 3. Resto de ENV y CI, LOC y REL.
 4. SEC, DEP y TPL-01.

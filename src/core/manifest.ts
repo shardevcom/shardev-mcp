@@ -74,6 +74,8 @@ export const ProjectsRegistrySchema = z
     projects: z.record(z.string().regex(NAME_RE), z
         .object({
           path: z.string().min(1),
+          /** Raíz del árbol de código (donde viven `.aws/env/` y `env.schema`) si no es `path`. Absoluta; por defecto `path`. */
+          root: z.string().min(1).optional(),
           /** Entornos que el dueño declara como producción, sin importar lo que diga el ops.yaml del proyecto. */
           production_envs: z.array(z.string().regex(NAME_RE)).default([]),
         })
@@ -125,6 +127,8 @@ export async function loadRegistry(paths: Paths): Promise<ProjectsRegistry> {
 export interface ResolvedProject {
   name: string;
   path: string;
+  /** Raíz del árbol de código: `root` de projects.yaml o, si falta, `path`. */
+  root: string;
   manifest: OpsManifest;
   /** `production_envs` del proyecto en projects.yaml (config del dueño). */
   productionEnvs: string[];
@@ -140,13 +144,16 @@ export async function resolveProject(paths: Paths, name: string): Promise<Resolv
   if (!isAbsolute(entry.path)) {
     throw new ShardevError("invalid_manifest", `La ruta del proyecto "${name}" debe ser absoluta.`);
   }
+  if (entry.root !== undefined && !isAbsolute(entry.root)) {
+    throw new ShardevError("invalid_manifest", `El \`root\` del proyecto "${name}" debe ser una ruta absoluta.`);
+  }
   const text = await readIfExists(join(entry.path, "ops.yaml"));
   if (text === null) throw new ShardevError("invalid_manifest", `No se encontró ops.yaml en el proyecto "${name}".`);
   const manifest = parseManifest(text);
   if (manifest.project.name !== name) {
     throw new ShardevError("invalid_manifest", `ops.yaml declara el proyecto "${manifest.project.name}", pero está registrado como "${name}".`);
   }
-  return { name, path: entry.path, manifest, productionEnvs: entry.production_envs };
+  return { name, path: entry.path, root: entry.root ?? entry.path, manifest, productionEnvs: entry.production_envs };
 }
 
 /** `env` es obligatorio en todas partes: nunca hay entorno por defecto. */

@@ -3,3 +3,6 @@
 projects:
   demo:
     path: /ruta/absoluta/al/proyecto/demo
+    # production_envs: [prod]             # opcional
+    # root: /ruta/absoluta/al/codigo/demo # opcional: árbol con .aws/env/ y env.schema si no es `path`
+    #   Actualiza el CLI ANTES de añadir `root` (el esquema es estricto), igual que con `services`.
