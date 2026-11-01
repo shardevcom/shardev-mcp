@@ -39,7 +39,31 @@ Lista blanca explícita de campos; cualquier otro (p. ej. `overrides`, variables
 
 ## Límites conocidos
 
-- La redacción solo detecta secretos con forma conocida o nombre sospechoso. **No detecta datos personales** (correos, nombres, identificadores de clientes) que aparezcan en los logs: ese contenido llega a disco, solo redactado de secretos, hasta que la retención de 7 días lo borra. Por eso no se devuelve en el resultado.
+- La redacción de secretos no detecta datos personales; para eso existe el enmascarado de la sección "Datos personales en `ops_logs`" (reduce exposición, no anonimiza).
 - El texto de `filter` queda en la auditoría tal como lo deja la redacción estándar de `AuditLog` (recorte a 200 caracteres y redacción por patrones y por nombre de clave); un valor sensible sin forma reconocible escrito en el filtro quedaría en `audit.jsonl`. No pongas secretos en `filter`.
 - `stoppedReason` y `reason` de contenedores vienen de AWS pero pueden incluir texto de la aplicación; se redactan y se marcan como no confiables.
 - La salida del CLI de AWS está limitada por el límite de `exec` (8 MiB); si se supera, la herramienta falla pidiendo reducir `limit` o `since_minutes`.
+
+## Datos personales en `ops_logs` (ADJ-05)
+
+Además de la redacción de secretos, el contenido de `ops_logs` se enmascara **antes de guardarse** con `maskPersonalData` (`src/core/pii-mask.ts`). Solo se aplica a esta herramienta: el `Redactor` global, la salida de comandos y los demás logs no cambian. No existe ningún parámetro, flag ni variable que lo desactive (un agente podría usarlo). Se aplica al mensaje de cada evento, no a la marca de tiempo ni a la cabecera, y después de redactar secretos (así `usuario:clave@host` no se confunde con un correo).
+
+**Qué se detecta**
+- Correos electrónicos => `[EMAIL]`.
+- 7 o más dígitos seguidos, con `+` inicial opcional => `[NUMERO]`.
+- Grupos de dígitos separados por un espacio o guion (`+57 300 123 4567`, `300-123-4567`; tras el primer grupo, grupos de 2 a 4 dígitos) con 9 o más dígitos en total => `[NUMERO]`.
+
+**Qué se conserva a propósito**: fechas y horas ISO 8601, UUID, y números cortos (estados HTTP, puertos, duraciones, conteos de menos de 7 dígitos; un decimal como `1234567.89` o `3.14159265` tampoco se toca). Los identificadores pegados a letras o `_` (`req_1234567`, `abc1234567`) no se enmascaran.
+
+**Decisiones y compromisos**
+- *Epoch.* Un epoch de 10 o 13 dígitos que empieza por 1 es indistinguible de un teléfono o documento. Solo se conserva si la clave inmediatamente anterior indica tiempo (`ts`, `time`, `timestamp`, `epoch`, `date`, `*_at`, `iat`, `exp`, `nbf`, `duration`, `latency`...); sin clave se enmascara. Se prefirió perder algún epoch a dejar pasar un documento de identidad.
+- *ID numéricos largos* (pedidos, usuarios, trazas numéricas de 7+ dígitos) y fechas compactas (`20261101`) se enmascaran: se pierde la capacidad de correlacionarlos entre eventos. Es el precio de la regla conservadora.
+- *Grupos con espacios.* `200 1234 5678` se interpreta como un solo número; un estado HTTP pegado a otros grupos de dígitos puede quedar absorbido.
+- Los falsos positivos son preferibles a los falsos negativos; los falsos negativos existen (ver abajo).
+
+**Qué NO se detecta**: nombres de personas, direcciones postales, nombres de empresa, texto libre, usuarios o alias sin forma de correo, números con formatos distintos (letras intercaladas, separadores raros), datos en base64/JSON codificado, direcciones IP (se consideran datos técnicos). **Esto reduce la exposición pero no es anonimización**: no debe tratarse el contenido guardado como libre de datos personales.
+
+**Resultado y límites**
+- El resultado de `ops_logs` solo incluye `personal_data_masked` (cantidad de coincidencias enmascaradas), nunca los valores.
+- El texto de `filter` **no** se enmascara: se envía tal cual a CloudWatch (la búsqueda es en el servidor) y queda en la auditoría con la redacción estándar. Si contiene un correo o un número, ese dato consta en la consulta y en `audit.jsonl`; evita poner datos personales en `filter`. La cabecera del archivo guardado no incluye el filtro (solo si se aplicó, `filter_applied`, en el resultado).
+- El enmascarado es idempotente (`[EMAIL]` y `[NUMERO]` no contienen @ ni dígitos), y `log_read` devuelve el texto ya enmascarado.

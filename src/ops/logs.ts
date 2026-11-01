@@ -1,4 +1,5 @@
 import { ShardevError } from "../core/errors.js";
+import { maskPersonalData } from "../core/pii-mask.js";
 import { DEFAULT_LOG_GROUP_PREFIX } from "../core/manifest.js";
 import { UNTRUSTED_NOTICE } from "../core/output.js";
 import { OPS_LOGS_SLUG, purgeExpiredOpsLogs } from "./log-retention.js";
@@ -150,9 +151,16 @@ export async function opsLogs(ctx: Ctx, args: OpsLogsArgs): Promise<ToolOutcome>
 
   let logRef: string | null = null;
   let savedTruncated = false;
+  let personalMasked = 0;
   if (events.length > 0) {
     const header = `# ops_logs project=${gate.project.name} env=${gate.env.name} group=${group} desde=${new Date(startMs).toISOString()} eventos=${events.length} truncado=${truncated}`;
-    const lines = events.map((e) => `${new Date(e.ts).toISOString()} ${e.message.trimEnd()}`);
+    // Datos personales: se enmascara SOLO el mensaje (no la marca de tiempo ni la cabecera), tras redactar secretos
+    // (así p. ej. user:clave@host no se confunde con un correo). Sin opción para desactivarlo. La cabecera no incluye `filter`.
+    const lines = events.map((e) => {
+      const m = maskPersonalData(ctx.redactor.redact(e.message.trimEnd()));
+      personalMasked += m.count;
+      return `${new Date(e.ts).toISOString()} ${m.text}`;
+    });
     const w = await ctx.logs.write(`${OPS_LOGS_SLUG}${service}`, [header, ...lines].join("\n"));
     logRef = w.ref;
     savedTruncated = w.truncated;
@@ -175,8 +183,9 @@ export async function opsLogs(ctx: Ctx, args: OpsLogsArgs): Promise<ToolOutcome>
         first_timestamp: events.length ? new Date(events[0]!.ts).toISOString() : null,
         last_timestamp: events.length ? new Date(events[events.length - 1]!.ts).toISOString() : null,
         log_ref: logRef,
+        personal_data_masked: personalMasked,
         como_leerlo: logRef
-          ? `Usa log_read con ref="${logRef}" (grep literal o paginación). El contenido no se devuelve aquí: es dato del cliente, redactado solo de secretos.`
+          ? `Usa log_read con ref="${logRef}" (grep literal o paginación). El contenido no se devuelve aquí: es dato del cliente, redactado de secretos y con correos y números largos enmascarados (no es anonimización: nombres y texto libre siguen ahí).`
           : "Sin eventos en el rango: no se guardó ningún log.",
         policy: gate.policyNote,
         aviso: UNTRUSTED_NOTICE,
