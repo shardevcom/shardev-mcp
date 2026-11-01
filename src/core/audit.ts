@@ -21,6 +21,8 @@ export interface AuditEntry {
   tier: Tier;
   decision: Decision;
   exit_code?: number | null;
+  /** Operaciones que cambian algo: `intent` se escribe ANTES del cambio (exit_code null) y `result` al terminar. Ausente en el resto. */
+  phase?: "intent" | "result";
   duration_ms: number;
   /** Argumentos de la herramienta; se redactan y recortan antes de escribir. */
   args?: unknown;
