@@ -125,7 +125,10 @@ export async function runChange(
     if (r.state === "timeout") rows.push({ service, state: "unknown", reason: `${r.message} Puede haberse aplicado: verifica con \`shardev ops services --project ${project} --env ${env.name}\`.` });
     else rows.push({ service, state: "failed", reason: ctx.redactor.redact(r.message).slice(0, 400) });
   }
-  return result(rows, rows.every((r) => r.state === "done" || r.state === "unchanged"), plan.next(project, env.name));
+  const ok = rows.every((r) => r.state === "done" || r.state === "unchanged");
+  // Un fallo del CLI de AWS no prueba que la petición no se aplicara: se pide comprobar el estado real.
+  const incomplete = `No todos los cambios se iniciaron: revisa el estado de cada servicio. Un fallo no prueba que la petición no se aplicara; comprueba el estado real con: shardev ops services --project ${project} --env ${env.name}`;
+  return result(rows, ok, ok ? plan.next(project, env.name) : incomplete);
 }
 
 export const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});

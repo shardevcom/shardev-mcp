@@ -156,6 +156,25 @@ describe("shardev ops redeploy", () => {
     expect(s.updates()).toHaveLength(1);
   });
 
+  test("señal ajena al timeout: estado unknown, no failed", async () => {
+    const s = await setup({ update: (a) => (a.includes("demo-staging-app") ? { exitCode: null, signal: "SIGKILL" } : ok("d")()) });
+    expect(await runOps([...STG, "--all", "--json"], s.io, s.ctx)).toBe(1);
+    const res = JSON.parse(s.out.join(""));
+    expect(res.services.map((x: { state: string }) => x.state)).toEqual(["unknown", "not_attempted"]);
+    expect(res.services[0].reason).toContain("SIGKILL");
+    expect(res.services[0].reason).toContain("shardev ops services");
+    expect(s.updates()).toHaveLength(1);
+  });
+
+  test("con un fallo, el resultado no dice que se inició y pide comprobar el estado real", async () => {
+    const s = await setup({ update: () => ({ exitCode: 255, stderr: "Read timeout on endpoint URL" }) });
+    expect(await runOps([...STG, "--all", "--json"], s.io, s.ctx)).toBe(1);
+    const res = JSON.parse(s.out.join(""));
+    expect(res.services[0].state).toBe("failed");
+    expect(res.next).not.toMatch(/iniciado/i);
+    expect(res.next).toContain("shardev ops services --project demo --env staging");
+  });
+
   test("sesión que caduca a mitad: fallo con el comando de login", async () => {
     const s = await setup({ update: () => ({ exitCode: 255, stderr: "Error when retrieving token from sso: Token has expired and refresh failed" }) });
     expect(await runOps([...STG, "--all"], s.io, s.ctx)).toBe(1);
