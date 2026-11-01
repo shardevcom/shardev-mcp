@@ -4,6 +4,7 @@ import { defaultPaths } from "./core/paths.js";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
 import { appCreate, appPlan } from "./ops/app.js";
 import { opsServices, opsTasks } from "./ops/ecs.js";
+import { logRead } from "./ops/log-read.js";
 import { opsLogs } from "./ops/logs.js";
 import { opsStatus } from "./ops/status.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
@@ -25,16 +26,18 @@ Uso:
   ${CLI_NAME} ops services --project <nombre> --env <entorno> [--service <servicio>] [--json]
   ${CLI_NAME} ops tasks --project <nombre> --env <entorno> --service <servicio> [--status RUNNING|STOPPED] [--json]
   ${CLI_NAME} ops logs --project <nombre> --env <entorno> --service <servicio> [--since-minutes <1-1440>] [--filter <texto>] [--limit <1-1000>] [--json]
+  ${CLI_NAME} ops log-read --ref <log_ref> [--grep <texto>] [--context <0-5>] [--offset <n>] [--limit <1-500>] [--json]
   ${CLI_NAME} --version | --help
 
 project plan/create/verify usan las mismas funciones que las herramientas MCP project_plan,
 project_create y project_verify (misma política, mismas raíces permitidas, misma auditoría).
 app plan/create usan las mismas funciones que las herramientas app_plan y app_create (añadir una app a un
 proyecto ya generado; --features admite otp, social, mfa e invitations; mfa no se combina con otp ni social).
-ops status|services|tasks|logs usan las mismas funciones que las herramientas ops_status, ops_services, ops_tasks y
-ops_logs (solo lectura; misma política y auditoría). --env es obligatorio en services/tasks/logs (sin default) y los
+ops status|services|tasks|logs|log-read usan las mismas funciones que las herramientas ops_status, ops_services, ops_tasks y
+ops_logs y log_read (solo lectura; misma política y auditoría). --env es obligatorio en services/tasks/logs (sin default) y los
 servicios deben estar declarados en \`services\` del entorno en ops.yaml. ops logs no imprime el contenido: lo guarda
-redactado y muestra el log_ref para leerlo con la herramienta log_read.
+redactado y muestra el log_ref para leerlo con \`ops log-read --ref <log_ref>\` (o la herramienta MCP log_read).
+ops log-read no necesita --project ni --env: lee solo por referencia y marca el contenido como dato no confiable.
 Con --json la salida es exactamente el JSON de la herramienta; el código de salida es 1 si falla.
 `;
 
@@ -49,7 +52,7 @@ interface Parsed {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit"]);
+const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit", "ref", "grep", "context", "offset"]);
 
 function parseArgs(argv: string[]): Parsed {
   const positional: string[] = [];
@@ -233,6 +236,21 @@ export async function runOps(argv: string[], io: CliIo, ctx: Ctx = createContext
       filter: strFlag(p, "filter"),
       limit: intFlag(p, "limit"),
     });
+  } else if (cmd === "log-read") {
+    const args = { ref: need(p, "ref"), grep: strFlag(p, "grep"), context: intFlag(p, "context"), offset: intFlag(p, "offset"), limit: intFlag(p, "limit") };
+    // Mismos límites que el esquema de la herramienta MCP log_read.
+    const bad =
+      args.ref.length > 130 ? "--ref admite hasta 130 caracteres"
+      : args.grep !== undefined && args.grep.length > 200 ? "--grep admite hasta 200 caracteres"
+      : args.context !== undefined && args.context > 5 ? "--context debe estar entre 0 y 5"
+      : args.offset !== undefined && args.offset < 1 ? "--offset debe ser >= 1"
+      : args.limit !== undefined && (args.limit < 1 || args.limit > 500) ? "--limit debe estar entre 1 y 500"
+      : undefined;
+    if (bad) {
+      io.out(`${bad}\n`);
+      return 1;
+    }
+    outcome = await logRead(ctx, args);
   } else {
     throw new ShardevError("invalid_input", `Subcomando de ops desconocido: ${cmd ?? "(ninguno)"}`);
   }
