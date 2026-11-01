@@ -60,6 +60,10 @@ export interface CliIo {
   out: (s: string) => void;
   err: (s: string) => void;
   stdin: () => Promise<string>;
+  /** ¿Es el flujo un terminal real? Opcional: si falta se trata como no-TTY (falla cerrado). Ver core/confirm.ts. */
+  isTty?: (stream: "stdin" | "stderr") => boolean;
+  /** Lee una sola línea de stdin (sin salto de línea); `null` en EOF. Solo para la confirmación humana. */
+  readLine?: () => Promise<string | null>;
 }
 
 interface Parsed {
