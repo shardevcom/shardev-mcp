@@ -7,7 +7,8 @@ import { exec, type Runner } from "../src/core/exec.js";
 import { createServer } from "../src/server.js";
 import { annotationsForTier, effectiveTier, listOperations, metaForTier } from "../src/ops/catalog.js";
 import { auditFile } from "../src/core/paths.js";
-import { cleanup, fakeRunner, registerDemoProject, tempDir, tempPaths, write } from "./helpers/fixtures.js";
+import { awsRunner } from "./helpers/aws-fixtures.js";
+import { OPS_YAML_SERVICES, cleanup, fakeRunner, registerDemoProject, tempDir, tempPaths, write } from "./helpers/fixtures.js";
 import { SPEC, writeTemplates } from "./helpers/gen-fixtures.js";
 
 afterEach(cleanup);
@@ -31,7 +32,7 @@ describe("servidor MCP", () => {
   test("expone ops_status/log_read (solo lectura) y project_* (T2: no solo lectura, no destructivas, sin AWS)", async () => {
     const { client } = await connect();
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["app_create", "app_plan", "log_read", "ops_status", "project_create", "project_plan", "project_verify"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["app_create", "app_plan", "log_read", "ops_logs", "ops_services", "ops_status", "ops_tasks", "project_create", "project_plan", "project_verify"]);
     for (const t of tools) {
       const t2 = t.name.startsWith("project_") || t.name.startsWith("app_");
       expect(t.annotations?.readOnlyHint).toBe(!t2);
@@ -39,6 +40,39 @@ describe("servidor MCP", () => {
       if (t2) expect(t.annotations?.openWorldHint).toBe(false);
       expect(t._meta).toBeUndefined();
     }
+  });
+
+  test("ops_services/ops_tasks/ops_logs: T1, solo lectura, openWorld; env obligatorio; la lectura se audita", async () => {
+    const { client, call, paths } = await connect({ "demo-stg": "111111111111" });
+    const { tools } = await client.listTools();
+    for (const name of ["ops_services", "ops_tasks", "ops_logs"]) {
+      const t = tools.find((x) => x.name === name)!;
+      expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+      expect(t._meta).toBeUndefined();
+      expect((t.inputSchema as { required?: string[] }).required).toEqual(expect.arrayContaining(["project", "env"]));
+    }
+    expect((tools.find((x) => x.name === "ops_tasks")!.inputSchema as { required?: string[] }).required).toContain("service");
+    expect((tools.find((x) => x.name === "ops_logs")!.inputSchema as { required?: string[] }).required).toContain("service");
+    // sin env: el esquema lo rechaza (no hay default)
+    await expect(client.callTool({ name: "ops_services", arguments: { project: "demo" } })).resolves.toMatchObject({ isError: true });
+    await expect(client.callTool({ name: "ops_logs", arguments: { project: "demo", env: "staging", service: "demo-staging-app", limit: 5000 } })).resolves.toMatchObject({ isError: true });
+    // proyecto sin `services`: falla cerrado y queda auditado como rechazado
+    await registerDemoProject(paths);
+    const r = await call("ops_services", { project: "demo", env: "staging" });
+    expect(r.isError).toBe(true);
+    expect(r.text).toContain("no declara `services`");
+    const audit = (await readFile(auditFile(paths), "utf8")).trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(audit.at(-1)).toMatchObject({ tool: "ops_services", project: "demo", env: "staging", tier: "T1", decision: "rejected" });
+  });
+
+  test("ops_services por MCP con servicios declarados: lee y audita decision allowed", async () => {
+    const { call, paths } = await connect({ "demo-stg": "111111111111" }, { runner: awsRunner({ "demo-stg": "111111111111" }, { "ecs describe-services": () => ({ services: [{ serviceName: "demo-staging-app", status: "ACTIVE", desiredCount: 1, runningCount: 1, pendingCount: 0 }], failures: [] }) }) });
+    await registerDemoProject(paths, "", OPS_YAML_SERVICES());
+    const r = await call("ops_services", { project: "demo", env: "staging" });
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text).services[0]).toMatchObject({ service: "demo-staging-app", status: "ACTIVE" });
+    const audit = (await readFile(auditFile(paths), "utf8")).trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(audit.at(-1)).toMatchObject({ tool: "ops_services", env: "staging", tier: "T1", decision: "allowed" });
   });
 
   test("project_plan -> project_create por MCP: exige plan_id (nunca un spec) y audita en T2", async () => {
@@ -137,7 +171,8 @@ describe("catálogo", () => {
     expect(effectiveTier("T2", { name: "live", is_production: false }, ["live"])).toBe("T3");
     expect(effectiveTier("T1", { is_production: true })).toBe("T1");
   });
-  test("las únicas operaciones que cambian estado son project_* y app_* (T2, sin AWS); ninguna T3", () => {
+  test("las únicas operaciones que cambian estado son project_* y app_* (T2, sin AWS); ninguna T3; las lecturas AWS son T1", () => {
+    for (const n of ["ops_services", "ops_tasks", "ops_logs"]) expect(listOperations().find((o) => o.name === n)).toMatchObject({ tier: "T1", usesAws: true });
     const changing = listOperations().filter((o) => o.tier === "T2" || o.tier === "T3");
     expect(changing.map((o) => o.name).sort()).toEqual(["app_create", "app_plan", "project_create", "project_plan", "project_verify"]);
     expect(changing.every((o) => o.tier === "T2" && !o.usesAws)).toBe(true);

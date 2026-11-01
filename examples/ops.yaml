@@ -2,8 +2,8 @@
 project:
   name: demo                      # debe coincidir con el nombre registrado en projects.yaml
 stack: laravel
-service_prefix: demo-             # todo servicio ECS del proyecto debe empezar así (cluster compartido)
-capabilities: [ecs, logs]
+service_prefix: demo-             # todo servicio ECS del proyecto debe empezar así (cluster compartido); no basta para separar entornos: ver `services`
+capabilities: [ecs, logs]         # ecs: ops_services/ops_tasks; logs: ops_logs
 policy:
   max_mode: command-only          # opcional: el proyecto solo puede RESTRINGIR, nunca ampliar
 environments:                     # no existe entorno por defecto: siempre se indica `env`
@@ -13,9 +13,11 @@ environments:                     # no existe entorno por defecto: siempre se in
     account_id: "111111111111"
     region: us-east-1
     cluster: shared
+    services: [demo-staging-app, demo-staging-worker]   # nombres EXACTOS de este entorno (requerido por ops_services/ops_tasks/ops_logs)
   - name: prod
     is_production: true
     aws_profile: mi-perfil-prod
     account_id: "222222222222"
     region: us-east-1
     cluster: shared
+    services: [demo-app, demo-worker]

@@ -2,9 +2,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
-import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_STATUS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
+import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
 import { logRead } from "./ops/log-read.js";
 import { opsStatus } from "./ops/status.js";
+import { opsServices, opsTasks } from "./ops/ecs.js";
+import { opsLogs } from "./ops/logs.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 import { appCreate, appPlan } from "./ops/app.js";
 import { AppPlanInputSchema } from "./gen/app.js";
@@ -75,6 +77,50 @@ export function createServer(options: { paths?: Paths; runner?: Runner; template
       inputSchema: { project: NAME.optional().describe("Nombre de un proyecto registrado (no una ruta)"), env: NAME.optional().describe("Entorno; si se omite se listan todos (nunca hay default)") },
     },
     wrap(ctx, OPS_STATUS, opsStatus as Handler<{ project?: string; env?: string }>),
+  );
+
+  const ENV_REQUIRED = NAME.describe("Entorno (obligatorio, sin default)");
+  const PROJECT = NAME.describe("Nombre de un proyecto registrado (no una ruta)");
+  const SERVICE = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/);
+
+  server.registerTool(
+    OPS_SERVICES.name,
+    {
+      ...common(OPS_SERVICES),
+      description:
+        "Estado de servicios ECS del entorno (solo lectura, ecs describe-services): estado, conteos, task definition, despliegues y últimos 5 eventos (texto no confiable). Solo servicios declarados en `services` del entorno en ops.yaml; sin `service` devuelve todos. Requiere la capacidad `ecs`.",
+      inputSchema: { project: PROJECT, env: ENV_REQUIRED, service: SERVICE.optional().describe("Servicio exacto declarado en ops.yaml; si se omite, todos los del entorno") },
+    },
+    wrap(ctx, OPS_SERVICES, opsServices as Handler<{ project?: string; env?: string; service?: string }>),
+  );
+
+  server.registerTool(
+    OPS_TASKS.name,
+    {
+      ...common(OPS_TASKS),
+      description:
+        "Tareas ECS de un servicio declarado (solo lectura, list-tasks + describe-tasks, máx. 20): id corto, estados, task definition, horas, stopCode/stoppedReason y contenedores (nombre, estado, exitCode, reason). Nunca devuelve overrides ni variables de entorno. Requiere la capacidad `ecs`.",
+      inputSchema: { project: PROJECT, env: ENV_REQUIRED, service: SERVICE, status: z.enum(["RUNNING", "STOPPED"]).optional().describe("Por defecto RUNNING") },
+    },
+    wrap(ctx, OPS_TASKS, opsTasks as Handler<{ project?: string; env?: string; service?: string; status?: string }>),
+  );
+
+  server.registerTool(
+    OPS_LOGS.name,
+    {
+      ...common(OPS_LOGS),
+      description:
+        "Busca eventos en el grupo de logs /ecs/<servicio> (solo lectura, logs filter-log-events). El contenido NO vuelve en el resultado: se guarda redactado y se devuelve solo conteo, rango de tiempo y `log_ref` para leerlo con log_read. Se borran los logs de esta herramienta con más de 7 días. Requiere la capacidad `logs`.",
+      inputSchema: {
+        project: PROJECT,
+        env: ENV_REQUIRED,
+        service: SERVICE,
+        since_minutes: z.number().int().min(1).max(1440).optional().describe("Por defecto 60, máx. 1440"),
+        filter: z.string().max(200).optional().describe("Texto literal (no sintaxis de filtro de CloudWatch)"),
+        limit: z.number().int().min(1).max(1000).optional().describe("Por defecto 200, máx. 1000"),
+      },
+    },
+    wrap(ctx, OPS_LOGS, opsLogs as Handler<{ project?: string; env?: string; service?: string; since_minutes?: number; filter?: string; limit?: number }>),
   );
 
   server.registerTool(

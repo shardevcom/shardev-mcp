@@ -1,4 +1,4 @@
-import { lstat, readFile, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { ShardevError } from "./errors.js";
@@ -64,6 +64,38 @@ export class LogStore {
     const ref = `${stamp}-${randomBytes(4).toString("hex")}-${slug(label)}.log`;
     await writeFile(join(this.dir, ref), text, { mode: 0o600, flag: "wx" });
     return { ref, bytes: Buffer.byteLength(text), lines: text.split("\n").length, truncated };
+  }
+
+  /**
+   * Borra los logs generados por esta clase cuya etiqueta (ya normalizada) empieza por `slugPrefix` y cuya
+   * marca de tiempo (la del nombre, UTC) es anterior a `maxAgeMs`. Solo toca archivos regulares con el
+   * nombre exacto que produce `write`; ignora symlinks, directorios y cualquier otro archivo. Devuelve cuántos borró.
+   */
+  async purgeOlderThan(slugPrefix: string, maxAgeMs: number): Promise<number> {
+    const re = new RegExp(`^(\\d{4})(\\d{2})(\\d{2})T(\\d{2})(\\d{2})(\\d{2})-[0-9a-f]{8}-${slugPrefix.replace(/[^a-z0-9-]/g, "")}[a-z0-9-]*\\.log$`);
+    const cutoff = this.now().getTime() - maxAgeMs;
+    let names: string[];
+    try {
+      names = await readdir(this.dir);
+    } catch {
+      return 0;
+    }
+    let removed = 0;
+    for (const name of names) {
+      const m = re.exec(name);
+      if (!m) continue;
+      const [y, mo, d, h, mi, se] = m.slice(1).map(Number) as [number, number, number, number, number, number];
+      if (Date.UTC(y, mo - 1, d, h, mi, se) >= cutoff) continue;
+      const path = join(this.dir, name);
+      try {
+        if (!(await lstat(path)).isFile()) continue; // lstat: un symlink no es archivo regular
+        await unlink(path);
+        removed++;
+      } catch {
+        /* un archivo que no se puede borrar no impide borrar el resto */
+      }
+    }
+    return removed;
   }
 
   /** Guarda stdout+stderr de un comando. */

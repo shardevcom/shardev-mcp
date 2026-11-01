@@ -10,6 +10,8 @@ export type Mode = (typeof MODES)[number];
 export const ModeSchema = z.enum(MODES);
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+/** Nombre de servicio ECS: letras, dígitos, guiones y guiones bajos (máx. 255). */
+const ECS_SERVICE_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/;
 
 export const EnvironmentSchema = z
   .object({
@@ -20,6 +22,12 @@ export const EnvironmentSchema = z
     account_id: z.string().regex(/^\d{12}$/, "account_id debe tener 12 dígitos"),
     region: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d$/),
     cluster: z.string().min(1),
+    /**
+     * Servicios ECS de ESTE entorno, nombre exacto. Opcional para no romper manifests existentes, pero las
+     * herramientas de lectura ECS/logs fallan cerradas sin él: con cluster y cuenta compartidos, un
+     * `service_prefix` solo no separa entornos (el prefijo de producción también cubre los de staging).
+     */
+    services: z.array(z.string().regex(ECS_SERVICE_RE, "nombre de servicio ECS inválido")).min(1).optional(),
   })
   .strict();
 export type Environment = z.infer<typeof EnvironmentSchema>;
@@ -39,6 +47,12 @@ export const OpsManifestSchema = z
   .superRefine((m, ctx) => {
     const seen = new Set<string>();
     m.environments.forEach((e, i) => {
+      e.services?.forEach((svc, j) => {
+        if (!svc.startsWith(m.service_prefix) || svc.length === m.service_prefix.length) {
+          ctx.addIssue({ code: "custom", message: `El servicio "${svc}" no empieza por service_prefix ("${m.service_prefix}")`, path: ["environments", i, "services", j] });
+        }
+        if (e.services!.indexOf(svc) !== j) ctx.addIssue({ code: "custom", message: `Servicio duplicado: ${svc}`, path: ["environments", i, "services", j] });
+      });
       if (seen.has(e.name)) ctx.addIssue({ code: "custom", message: `Entorno duplicado: ${e.name}`, path: ["environments", i, "name"] });
       seen.add(e.name);
     });
@@ -138,13 +152,40 @@ export function requireEnvironment(manifest: OpsManifest, env: string | undefine
   return found;
 }
 
-/** Rechaza cualquier servicio ECS que no empiece por el prefijo del proyecto. */
-export function assertServiceName(manifest: OpsManifest, service: string): void {
+/** Servicios que el entorno declara. Falla cerrado si no hay `services` (no se descubre nada con list-services). */
+export function declaredServices(manifest: OpsManifest, env: Environment): string[] {
+  if (!env.services || env.services.length === 0) {
+    throw new ShardevError(
+      "services_not_declared",
+      `El entorno "${env.name}" de ${manifest.project.name} no declara \`services\` en ops.yaml: añade, bajo ese entorno, la lista exacta de servicios ECS (p. ej. services: [${manifest.service_prefix}app]).`,
+    );
+  }
+  return [...env.services];
+}
+
+/**
+ * Un servicio es válido para un entorno solo si empieza por `service_prefix` Y está listado
+ * exactamente en `services` de ESE entorno. El prefijo solo no basta (cluster y cuenta compartidos).
+ */
+export function assertServiceName(manifest: OpsManifest, env: Environment, service: string): void {
   const prefix = manifest.service_prefix;
   if (typeof service !== "string" || !service.startsWith(prefix) || service.length === prefix.length) {
     throw new ShardevError(
       "foreign_service",
       `El servicio "${String(service).slice(0, 80)}" no pertenece al proyecto ${manifest.project.name} (prefijo requerido: "${prefix}").`,
     );
+  }
+  if (!declaredServices(manifest, env).includes(service)) {
+    throw new ShardevError(
+      "foreign_service",
+      `El servicio "${service.slice(0, 80)}" no está declarado en \`services\` del entorno "${env.name}" de ${manifest.project.name}.`,
+    );
+  }
+}
+
+/** Una herramienta solo opera si el proyecto declara la capacidad correspondiente. */
+export function requireCapability(manifest: OpsManifest, capability: string): void {
+  if (!manifest.capabilities.includes(capability)) {
+    throw new ShardevError("capability_missing", `El proyecto ${manifest.project.name} no declara la capacidad "${capability}" en \`capabilities\` de ops.yaml.`);
   }
 }

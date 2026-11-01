@@ -47,9 +47,16 @@ environments:
     cluster: shared
 `;
 
-export async function registerDemoProject(paths: Paths, extraOps = ""): Promise<string> {
+/** Igual que OPS_YAML pero con `capabilities` configurable y `services` por entorno (staging y prod comparten cluster y prefijo `demo-`). */
+export const OPS_YAML_SERVICES = (capabilities = "[ecs, logs]"): string =>
+  OPS_YAML()
+    .replace("capabilities: [ecs]", `capabilities: ${capabilities}`)
+    .replace("    cluster: shared\n  - name: prod", "    cluster: shared\n    services: [demo-staging-app, demo-staging-worker]\n  - name: prod")
+    .replace(/    cluster: shared\n$/, "    cluster: shared\n    services: [demo-app, demo-worker]\n");
+
+export async function registerDemoProject(paths: Paths, extraOps = "", yaml: string = OPS_YAML(extraOps)): Promise<string> {
   const dir = await tempDir();
-  await writeFile(join(dir, "ops.yaml"), OPS_YAML(extraOps));
+  await writeFile(join(dir, "ops.yaml"), yaml);
   await writeFile(join(paths.configDir, "projects.yaml"), `projects:\n  demo:\n    path: ${dir}\n`);
   return dir;
 }

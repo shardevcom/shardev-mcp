@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { assertServiceName, parseManifest, requireEnvironment, resolveProject } from "../src/core/manifest.js";
-import { OPS_YAML, cleanup, registerDemoProject, tempPaths, tempDir, write } from "./helpers/fixtures.js";
+import { assertServiceName, declaredServices, parseManifest, requireCapability, requireEnvironment, resolveProject } from "../src/core/manifest.js";
+import { OPS_YAML, OPS_YAML_SERVICES, cleanup, registerDemoProject, tempPaths, tempDir, write } from "./helpers/fixtures.js";
 
 afterEach(cleanup);
 
@@ -30,12 +30,42 @@ describe("manifest", () => {
     expect(() => parseManifest(OPS_YAML().replace('"222222222222"', '"22"'))).toThrowError(/account_id/);
   });
 
-  test("servicio ajeno al prefijo del proyecto", () => {
-    expect(() => assertServiceName(manifest, "demo-web")).not.toThrow();
-    expect(() => assertServiceName(manifest, "otro-web")).toThrowError(/no pertenece/);
-    expect(() => assertServiceName(manifest, "demo-")).toThrowError(/no pertenece/);
-    expect(() => assertServiceName(manifest, "xdemo-web")).toThrowError(/no pertenece/);
-    expect(() => assertServiceName(manifest, "")).toThrowError(/no pertenece/);
+  test("servicio válido solo si empieza por el prefijo Y está listado en `services` de ESE entorno", () => {
+    const m = parseManifest(OPS_YAML_SERVICES());
+    const stg = requireEnvironment(m, "staging");
+    const prod = requireEnvironment(m, "prod");
+    expect(() => assertServiceName(m, prod, "demo-app")).not.toThrow();
+    expect(() => assertServiceName(m, stg, "demo-staging-app")).not.toThrow();
+    // el prefijo de producción también cubre `demo-staging-app`, pero no está en los services de prod
+    expect("demo-staging-app".startsWith(m.service_prefix)).toBe(true);
+    expect(() => assertServiceName(m, prod, "demo-staging-app")).toThrowError(/no está declarado/);
+    expect(() => assertServiceName(m, stg, "demo-app")).toThrowError(/no está declarado/);
+    expect(() => assertServiceName(m, prod, "otro-web")).toThrowError(/no pertenece/);
+    expect(() => assertServiceName(m, prod, "demo-")).toThrowError(/no pertenece/);
+    expect(() => assertServiceName(m, prod, "xdemo-web")).toThrowError(/no pertenece/);
+    expect(() => assertServiceName(m, prod, "")).toThrowError(/no pertenece/);
+    expect(() => assertServiceName(m, prod, "demo-app ")).toThrowError(/no está declarado/);
+  });
+
+  test("sin `services` el entorno falla cerrado (sin descubrimiento) y el manifest viejo sigue parseando", () => {
+    expect(manifest.environments.every((e) => e.services === undefined)).toBe(true);
+    expect(() => assertServiceName(manifest, requireEnvironment(manifest, "prod"), "demo-web")).toThrowError(/no declara `services`/);
+    expect(() => declaredServices(manifest, requireEnvironment(manifest, "prod"))).toThrowError(/services: \[demo-app\]/);
+  });
+
+  test("validación de `services` en el manifest", () => {
+    const withSvc = (list: string): string => OPS_YAML().replace("    cluster: shared\n  - name: prod", `    cluster: shared\n    services: ${list}\n  - name: prod`);
+    expect(() => parseManifest(withSvc("[]"))).toThrowError(/services/);
+    expect(() => parseManifest(withSvc("[otro-web]"))).toThrowError(/service_prefix/);
+    expect(() => parseManifest(withSvc("[demo-]"))).toThrowError(/service_prefix/);
+    expect(() => parseManifest(withSvc("[demo-a, demo-a]"))).toThrowError(/duplicado/);
+    expect(() => parseManifest(withSvc("['demo-a b']"))).toThrowError(/inválido/);
+    expect(parseManifest(withSvc("[demo-a]")).environments[0]!.services).toEqual(["demo-a"]);
+  });
+
+  test("capacidades", () => {
+    expect(() => requireCapability(manifest, "ecs")).not.toThrow();
+    expect(() => requireCapability(manifest, "logs")).toThrowError(/capacidad "logs"/);
   });
 });
 

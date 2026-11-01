@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { CLI_VERSION, USAGE, runApp, runProject } from "./cli-run.js";
+import { CLI_VERSION, USAGE, runApp, runOps, runProject } from "./cli-run.js";
 import { ShardevError } from "./core/errors.js";
 import { serve } from "./server.js";
 
@@ -15,9 +15,9 @@ async function main(argv: string[]): Promise<number> {
     await serve();
     return -1; // el transporte mantiene vivo el proceso
   }
-  if (group === "project" || group === "app") {
+  if (group === "project" || group === "app" || group === "ops") {
     try {
-      return await (group === "app" ? runApp : runProject)([sub ?? "", ...rest], {
+      return await (group === "app" ? runApp : group === "ops" ? runOps : runProject)([sub ?? "", ...rest], {
         out: (s) => process.stdout.write(s),
         err: (s) => process.stderr.write(s),
         stdin: readStdin,
