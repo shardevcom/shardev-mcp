@@ -18,7 +18,7 @@ import { opsStatus } from "./ops/status.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 
 export const CLI_NAME = "shardev";
-export const CLI_VERSION = "0.1.0";
+export const CLI_VERSION = "0.2.0";
 
 export const USAGE = `${CLI_NAME} ${CLI_VERSION}
 
