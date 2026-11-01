@@ -1,0 +1,10 @@
+name: docker
+scope: project
+order: 70
+requires: [project.name, project.domain]
+files:
+  - { src: files/Dockerfile, dest: Dockerfile }
+  - { src: files/dockerignore, dest: .dockerignore }
+  - { src: files/docker-compose.yml, dest: docker-compose.yml }
+  - { src: files/nginx.conf, dest: docker/nginx.conf }
+  - { src: files/php.ini, dest: docker/php.ini }

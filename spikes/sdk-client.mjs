@@ -1,0 +1,12 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+const c = new Client({ name: "t", version: "0" }, { capabilities: { elicitation: { form: {} } } });
+const { ElicitRequestSchema } = await import("@modelcontextprotocol/sdk/types.js");
+c.setRequestHandler(ElicitRequestSchema, async () => ({ action: "accept", content: { ok: true } }));
+await c.connect(new StdioClientTransport({ command: "node", args: ["spikes/sdk-server.mjs"] }));
+console.log("serverVersion", c.getServerVersion());
+const { tools } = await c.listTools();
+console.log(JSON.stringify(tools.map(t => ({ n: t.name, a: t.annotations, m: t._meta })), null, 1));
+console.log(JSON.stringify(await c.callTool({ name: "ping", arguments: {} })));
+console.log(JSON.stringify(await c.callTool({ name: "elicit_demo", arguments: { what: "x" } })));
+await c.close();

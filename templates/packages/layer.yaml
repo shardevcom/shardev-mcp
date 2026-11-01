@@ -1,0 +1,18 @@
+name: packages
+scope: project
+order: 20
+files:
+  - { tree: files, dest: . , render: [] }
+edits:
+  - type: json-merge
+    file: composer.json
+    value:
+      require:
+        shardevcom/supports: "^1.0"
+        shardevcom/repositories: "^1.0"
+        shardevcom/authentications: "^1.0"
+        shardevcom/integrations: "^1.0"
+        shardevcom/verification: "^1.0"
+      autoload-dev:
+        psr-4:
+          "Shardevcom\\Repositories\\Tests\\": "packages/shardevcom/repositories/tests/"

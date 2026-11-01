@@ -1,0 +1,11 @@
+name: claude-kit
+scope: project
+order: 80
+requires: [project.name]
+files:
+  - { src: files/CLAUDE.md, dest: CLAUDE.md }
+  - { src: files/rules-architecture.md, dest: .claude/rules/architecture.md }
+  - { src: files/rules-security.md, dest: .claude/rules/security.md }
+  - { src: files/rules-laravel.md, dest: .claude/rules/laravel.md }
+  - { src: files/rules-frontend.md, dest: .claude/rules/frontend.md }
+  - { src: files/rules-testing.md, dest: .claude/rules/testing.md }

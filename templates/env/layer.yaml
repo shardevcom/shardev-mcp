@@ -1,0 +1,9 @@
+name: env
+scope: project
+order: 60
+requires: [project.name, project.domain]
+files:
+  - { src: files/env.example, dest: .env.example }
+  - { src: files/env.local, dest: .env }
+  - { src: files/env.schema, dest: env.schema }
+  - { src: files/gitignore, dest: .gitignore }

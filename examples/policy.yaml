@@ -1,0 +1,11 @@
+# ~/.config/shardev-mcp/policy.yaml  (chmod 600)
+# Política del DUEÑO. Vive fuera de cualquier proyecto y ninguna herramienta puede escribirla.
+# Modos, de menos a más permisivo: disabled < command-only < gated-apply
+default_mode: command-only        # entornos NO productivos (si falta el archivo: command-only)
+
+aws_profiles:
+  mi-perfil-prod:
+    account_id: "222222222222"    # debe coincidir con la cuenta autenticada
+    production_mode: command-only
+    environments: [prod]          # opcional: entornos que este perfil puede operar
+# Un perfil que no esté aquí => producción queda `disabled` (fail closed).

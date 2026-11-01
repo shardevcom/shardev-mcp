@@ -1,0 +1,7 @@
+name: app-react-otp
+scope: app
+order: 51
+when: app.feature.otp
+requires: [app.key]
+files:
+  - { src: files/otp-form.tsx, dest: "resources/react/{{ app.key }}/src/pages/auth/sign-in/otp-form.tsx" }

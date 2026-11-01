@@ -1,0 +1,7 @@
+name: tests-otp
+scope: app
+order: 41
+when: app.feature.otp
+requires: [app.key, app.model, app.model_class, app.otp_mail_class, app.auto_register]
+files:
+  - { src: files/OtpLoginTest.php, dest: "tests/Feature/{{ app.model }}OtpLoginTest.php" }

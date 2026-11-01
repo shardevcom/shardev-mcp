@@ -1,0 +1,155 @@
+import { readFile } from "node:fs/promises";
+import { ShardevError } from "./core/errors.js";
+import { defaultPaths } from "./core/paths.js";
+import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
+import { appCreate, appPlan } from "./ops/app.js";
+import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
+
+export const CLI_NAME = "shardev";
+export const CLI_VERSION = "0.1.0";
+
+export const USAGE = `${CLI_NAME} ${CLI_VERSION}
+
+Uso:
+  ${CLI_NAME} mcp serve                                   Inicia el servidor MCP por stdio
+  ${CLI_NAME} project plan --spec <spec.json|-> --target <dir> [--json]
+  ${CLI_NAME} project create --plan-id <plan_id> [--json]
+  ${CLI_NAME} project verify --project <nombre> [--json]
+  ${CLI_NAME} app plan --project-path <dir> --key <key> --user-type <new|existing> [--provider <p>] [--table <t>]
+        [--model <M>] [--api-guard <g>] [--session-guard <g>] [--port <n>] [--build-dir <d>] [--features otp,social] [--social-providers google,microsoft,apple] [--auto-register] [--json]
+  ${CLI_NAME} app create --plan-id <plan_id> [--json]
+  ${CLI_NAME} --version | --help
+
+project plan/create/verify usan las mismas funciones que las herramientas MCP project_plan,
+project_create y project_verify (misma política, mismas raíces permitidas, misma auditoría).
+app plan/create usan las mismas funciones que las herramientas app_plan y app_create (añadir una app a un
+proyecto ya generado; --features admite otp y social; mfa e invitations aún no tienen capa).
+Con --json la salida es exactamente el JSON de la herramienta; el código de salida es 1 si falla.
+`;
+
+export interface CliIo {
+  out: (s: string) => void;
+  err: (s: string) => void;
+  stdin: () => Promise<string>;
+}
+
+interface Parsed {
+  positional: string[];
+  flags: Map<string, string | true>;
+}
+
+const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers"]);
+
+function parseArgs(argv: string[]): Parsed {
+  const positional: string[] = [];
+  const flags = new Map<string, string | true>();
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    if (a === "-") positional.push(a);
+    else if (a.startsWith("--")) {
+      const eq = a.indexOf("=");
+      const name = (eq === -1 ? a.slice(2) : a.slice(2, eq)).trim();
+      if (eq !== -1) flags.set(name, a.slice(eq + 1));
+      else if (VALUE_FLAGS.has(name)) {
+        const v = argv[++i];
+        if (v === undefined) throw new ShardevError("invalid_input", `--${name} necesita un valor`);
+        flags.set(name, v);
+      } else flags.set(name, true);
+    } else positional.push(a);
+  }
+  return { positional, flags };
+}
+
+function need(p: Parsed, name: string): string {
+  const v = p.flags.get(name);
+  if (typeof v !== "string" || v === "") throw new ShardevError("invalid_input", `Falta --${name}`);
+  return v;
+}
+
+/** Salida humana breve a partir del JSON de la herramienta. */
+function human(cmd: string, o: ToolOutcome): string {
+  if (o.isError && !o.text.trimStart().startsWith("{")) return o.text;
+  let j: Record<string, unknown>;
+  try {
+    j = JSON.parse(o.text) as Record<string, unknown>;
+  } catch {
+    return o.text;
+  }
+  if (cmd === "plan") {
+    const files = Array.isArray(j.files_to_create) ? j.files_to_create.length : 0;
+    const conflicts = Array.isArray(j.conflicts) ? (j.conflicts as string[]) : [];
+    const cmds = Array.isArray(j.commands) ? (j.commands as Array<{ name: string; runs_in: string }>) : [];
+    return [
+      String(j.note ?? ""),
+      `plan_id: ${String(j.plan_id)}`,
+      `destino: ${String(j.target)}`,
+      `archivos: ${files}; capas: ${Array.isArray(j.layers) ? (j.layers as string[]).join(", ") : ""}`,
+      `pasos: ${cmds.map((c) => `${c.name}(${c.runs_in})`).join(", ")}`,
+      ...conflicts.map((c) => `conflicto: ${c}`),
+      ...(Array.isArray(j.notes) ? (j.notes as string[]).map((n) => `nota: ${n}`) : []),
+    ].join("\n");
+  }
+  if (cmd === "create") return `${o.isError ? "FALLÓ" : "OK"}: ${String(j.message)}`;
+  const steps = Array.isArray(j.steps) ? (j.steps as Array<{ name: string; ok: boolean; duration_ms: number }>) : [];
+  return [`${o.isError ? "FALLÓ" : "OK"}: ${String(j.summary)}`, ...steps.map((s) => `  ${s.ok ? "ok " : "ERR"} ${s.name} (${Math.round(s.duration_ms / 1000)}s)`)].join("\n");
+}
+
+/** Ejecuta `shardev project ...`. Devuelve el código de salida. `ctx` se inyecta en tests. */
+export async function runProject(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
+  const p = parseArgs(argv);
+  const cmd = p.positional[0];
+  const json = p.flags.get("json") === true;
+  let outcome: ToolOutcome;
+  if (cmd === "plan") {
+    const specArg = need(p, "spec");
+    const raw = specArg === "-" ? await io.stdin() : await readFile(specArg, "utf8");
+    let spec: unknown;
+    try {
+      spec = JSON.parse(raw);
+    } catch (e) {
+      throw new ShardevError("invalid_input", `El spec no es JSON válido: ${(e as Error).message.slice(0, 80)}`);
+    }
+    outcome = await projectPlan(ctx, { spec, target: need(p, "target") });
+  } else if (cmd === "create") {
+    outcome = await projectCreate(ctx, { plan_id: need(p, "plan-id") });
+  } else if (cmd === "verify") {
+    outcome = await projectVerify(ctx, { project: need(p, "project") });
+  } else {
+    throw new ShardevError("invalid_input", `Subcomando de project desconocido: ${cmd ?? "(ninguno)"}`);
+  }
+  io.out(`${json ? outcome.text : human(cmd, outcome)}\n`);
+  return outcome.isError ? 1 : 0;
+}
+
+/** Ejecuta `shardev app ...`. Devuelve el código de salida. */
+export async function runApp(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
+  const p = parseArgs(argv);
+  const cmd = p.positional[0];
+  const json = p.flags.get("json") === true;
+  let outcome: ToolOutcome;
+  if (cmd === "plan") {
+    const opt = (name: string): string | undefined => {
+      const v = p.flags.get(name);
+      if (v === undefined) return undefined;
+      if (typeof v !== "string" || v === "") throw new ShardevError("invalid_input", `--${name} necesita un valor`);
+      return v;
+    };
+    const portArg = opt("port");
+    if (portArg !== undefined && !/^\d+$/.test(portArg)) throw new ShardevError("invalid_input", "--port debe ser un número entero");
+    const features = p.flags.has("features") ? String(p.flags.get("features") === true ? "" : p.flags.get("features")).split(",").map((x) => x.trim()).filter(Boolean) : [];
+    const list = (name: string): string[] => (p.flags.has(name) ? String(p.flags.get(name) === true ? "" : p.flags.get(name)).split(",").map((x) => x.trim()).filter(Boolean) : []);
+    const input: Record<string, unknown> = { project_path: need(p, "project-path"), key: need(p, "key"), user_type: need(p, "user-type"), features, social_providers: list("social-providers"), auto_register: p.flags.get("auto-register") === true };
+    for (const [flag, field] of [["provider", "provider"], ["table", "table"], ["model", "model"], ["api-guard", "api_guard"], ["session-guard", "session_guard"], ["build-dir", "build_dir"]] as const) {
+      const v = opt(flag);
+      if (v !== undefined) input[field] = v;
+    }
+    if (portArg !== undefined) input.port = Number(portArg);
+    outcome = await appPlan(ctx, input);
+  } else if (cmd === "create") {
+    outcome = await appCreate(ctx, { plan_id: need(p, "plan-id") });
+  } else {
+    throw new ShardevError("invalid_input", `Subcomando de app desconocido: ${cmd ?? "(ninguno)"}`);
+  }
+  io.out(`${json ? outcome.text : human(cmd, outcome)}\n`);
+  return outcome.isError ? 1 : 0;
+}

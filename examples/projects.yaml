@@ -1,0 +1,5 @@
+# ~/.config/shardev-mcp/projects.yaml
+# Las herramientas reciben el NOMBRE del proyecto, nunca una ruta.
+projects:
+  demo:
+    path: /ruta/absoluta/al/proyecto/demo

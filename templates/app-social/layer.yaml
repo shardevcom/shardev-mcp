@@ -1,0 +1,13 @@
+name: app-social
+scope: app
+order: 36
+when: app.feature.social
+requires: [app.key, app.model, app.model_class, app.table, app.api_guard, app.auto_register, app.social_providers_php, app.social_controller_class]
+files:
+  - { src: files/SocialController.php, dest: "app/Auth/Social/{{ app.model }}SocialController.php" }
+  - { src: files/SocialService.php, dest: "app/Auth/Social/{{ app.model }}SocialService.php" }
+  - { src: files/SocialRequest.php, dest: "app/Auth/Social/{{ app.model }}SocialRequest.php" }
+  - { src: files/SocialIdentity.php, dest: "app/Auth/Social/{{ app.model }}SocialIdentity.php" }
+  - { src: files/migration.php, dest: "database/migrations/2026_01_01_000200_create_{{ app.table }}_social_identities_table.php" }
+  - { src: files/config-social.php, dest: "config/social_{{ app.key }}.php" }
+  - { src: files/routes-social.php, dest: "routes/api/{{ app.key }}-social.php" }

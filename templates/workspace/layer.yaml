@@ -1,0 +1,6 @@
+name: workspace
+scope: project
+order: 15
+requires: [project.name]
+files:
+  - { tree: files, dest: ., render: [package.json, .npmrc] }

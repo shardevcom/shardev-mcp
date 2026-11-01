@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+coverage/
+.idea/
+.vscode/
+!.env.example
+!templates/**/.env.example

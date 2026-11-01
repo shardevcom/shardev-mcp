@@ -1,0 +1,7 @@
+# ~/.config/shardev-mcp/config.yaml
+# Config del DUEÑO. Ninguna herramienta la escribe.
+allowed_roots:                    # sin esto, project_create no crea nada
+  - /home/yo/projects
+leftover_terms:                   # opcional: términos que no deben aparecer en un proyecto generado
+  - acme-legacy                   # literal, sin distinguir mayúsculas; mínimo 2 caracteres
+  - legacy.example.com            # un término contenido en el nombre/dominio del proyecto nuevo no cuenta

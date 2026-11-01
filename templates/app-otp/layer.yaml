@@ -1,0 +1,14 @@
+name: app-otp
+scope: app
+order: 35
+when: app.feature.otp
+requires: [app.key, app.model, app.model_class, app.api_guard, app.auto_register, app.otp_controller_class]
+files:
+  - { src: files/OtpController.php, dest: "app/Auth/Otp/{{ app.model }}OtpController.php" }
+  - { src: files/OtpService.php, dest: "app/Auth/Otp/{{ app.model }}OtpService.php" }
+  - { src: files/OtpCodeRequest.php, dest: "app/Auth/Otp/{{ app.model }}OtpCodeRequest.php" }
+  - { src: files/OtpVerifyRequest.php, dest: "app/Auth/Otp/{{ app.model }}OtpVerifyRequest.php" }
+  - { src: files/LoginCodeMail.php, dest: "app/Auth/Otp/{{ app.model }}LoginCodeMail.php" }
+  - { src: files/login-code.blade.php, dest: "resources/views/mail/{{ app.key }}-login-code.blade.php" }
+  - { src: files/config-otp.php, dest: "config/otp_{{ app.key }}.php" }
+  - { src: files/routes-otp.php, dest: "routes/api/{{ app.key }}-otp.php" }

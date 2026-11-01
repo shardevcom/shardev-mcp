@@ -1,0 +1,7 @@
+name: tests-social
+scope: app
+order: 42
+when: app.feature.social
+requires: [app.key, app.model, app.model_class, app.social_identity_class, app.auto_register]
+files:
+  - { src: files/SocialLoginTest.php, dest: "tests/Feature/{{ app.model }}SocialLoginTest.php" }

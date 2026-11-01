@@ -1,0 +1,5 @@
+name: tests-auth
+scope: project
+order: 40
+files:
+  - { tree: files, dest: . }

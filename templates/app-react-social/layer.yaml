@@ -1,0 +1,7 @@
+name: app-react-social
+scope: app
+order: 52
+when: app.feature.social
+requires: [app.key]
+files:
+  - { src: files/social-buttons.tsx, dest: "resources/react/{{ app.key }}/src/pages/auth/sign-in/social-buttons.tsx" }

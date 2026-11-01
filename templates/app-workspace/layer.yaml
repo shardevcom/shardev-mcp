@@ -1,0 +1,23 @@
+name: app-workspace
+scope: app
+order: 55
+requires: [app.key]
+edits:
+  - type: json-merge
+    file: package.json
+    value:
+      scripts:
+        "dev:{{ app.key }}": "pnpm --filter @{{ project.name }}/{{ app.key }} dev"
+        "build:{{ app.key }}": "pnpm --filter @{{ project.name }}/{{ app.key }} build"
+        "types:{{ app.key }}": "pnpm --filter @{{ project.name }}/{{ app.key }} types"
+  - type: yaml-append
+    file: pnpm-workspace.yaml
+    path: [packages]
+    value: "resources/react/{{ app.key }}"
+  - type: json-merge
+    file: tsconfig.json
+    value:
+      compilerOptions:
+        paths:
+          "@{{ app.key }}/*": ["resources/react/{{ app.key }}/src/*"]
+      include: []

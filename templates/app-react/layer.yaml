@@ -1,0 +1,6 @@
+name: app-react
+scope: app
+order: 50
+requires: [app.key, app.port, app.build_dir, project.name]
+files:
+  - { tree: files, dest: "resources/react/{{ app.key }}", render: [.ts, .tsx, .json, .css] }

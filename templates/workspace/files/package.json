@@ -1,0 +1,15 @@
+{
+    "name": "{{ project.name }}",
+    "private": true,
+    "type": "module",
+    "version": "0.1.0",
+    "scripts": {
+        "dev": "pnpm -r --parallel --filter \"./resources/react/*\" dev",
+        "build": "pnpm -r --filter \"./resources/react/*\" build",
+        "types": "pnpm -r --filter \"./resources/react/*\" types"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.3"
+    },
+    "packageManager": "pnpm@10.34.5"
+}

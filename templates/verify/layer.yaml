@@ -1,0 +1,30 @@
+name: verify
+scope: project
+order: 900
+verify:
+  - name: php-lint
+    argv:
+      - php
+      - -r
+      - |
+        $bad = 0;
+        foreach (['app', 'bootstrap', 'config', 'database', 'routes', 'tests', 'packages'] as $d) {
+            if (!is_dir($d)) { continue; }
+            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($d, FilesystemIterator::SKIP_DOTS)) as $f) {
+                if ($f->getExtension() !== 'php' || str_contains($f->getPathname(), '.blade.')) { continue; }
+                exec('php -l ' . escapeshellarg($f->getPathname()) . ' 2>&1', $o, $c);
+                if ($c !== 0) { $bad++; fwrite(STDERR, $f->getPathname() . PHP_EOL); }
+            }
+        }
+        exit($bad === 0 ? 0 : 1);
+    timeout_s: 180
+  - { name: composer-install, argv: [composer, install, --no-interaction, --prefer-dist], timeout_s: 900, full: true, env: { COMPOSER_NO_AUDIT: "1" } }
+  - { name: artisan-boot, argv: [php, artisan, route:list, --json], timeout_s: 120, full: true }
+  - { name: sqlite-file, argv: [php, -r, "touch('database/verify.sqlite');"], timeout_s: 20, full: true }
+  - { name: migrate-sqlite, argv: [php, artisan, migrate, --force, --no-interaction], timeout_s: 300, full: true, env: { DB_CONNECTION: sqlite, DB_DATABASE: database/verify.sqlite } }
+  - { name: auth-setup, argv: [php, artisan, db:seed, --force, --no-interaction], timeout_s: 300, full: true, env: { DB_CONNECTION: sqlite, DB_DATABASE: database/verify.sqlite } }
+  - { name: phpunit, argv: [php, artisan, test], timeout_s: 900, full: true }
+  - { name: pnpm-install, argv: [pnpm, install, --no-frozen-lockfile], timeout_s: 1200, full: true }
+  - { name: pnpm-types, argv: [pnpm, run, types], timeout_s: 600, full: true }
+  - { name: pnpm-build, argv: [pnpm, run, build], timeout_s: 1200, full: true }
+  - { name: docker-compose-config, argv: [docker, compose, config, --quiet], timeout_s: 60, full: true }

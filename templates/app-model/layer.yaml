@@ -1,0 +1,9 @@
+name: app-model
+scope: app
+order: 25
+when: app.is_new
+requires: [app.model, app.table, app.api_guard]
+files:
+  - { src: files/Model.php, dest: "app/Models/{{ app.model }}.php" }
+  - { src: files/Factory.php, dest: "database/factories/{{ app.model }}Factory.php" }
+  - { src: files/migration.php, dest: "database/migrations/2025_09_10_000100_create_{{ app.table }}_table.php" }

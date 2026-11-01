@@ -1,0 +1,59 @@
+name: app-auth
+scope: app
+order: 30
+requires: [app.key, app.api_guard, app.session_guard, app.provider, app.model, app.build_dir]
+files:
+  - { src: files/routes-api.php, dest: "routes/api/{{ app.key }}.php" }
+  - { src: files/routes-web.php, dest: "routes/web/{{ app.key }}.php" }
+  - { src: files/AuthController.php, dest: "app/Http/Controllers/{{ app.model }}AuthController.php" }
+  - { src: files/spa.blade.php, dest: "resources/views/{{ app.key }}.blade.php" }
+edits:
+  - type: insert
+    file: config/auth.php
+    anchor: "// shardev:guards"
+    position: before
+    content: |
+      '{{ app.api_guard }}' => ['driver' => 'passport', 'provider' => '{{ app.provider }}'],
+      '{{ app.session_guard }}' => ['driver' => 'session', 'provider' => '{{ app.provider }}'],
+  - type: insert
+    file: config/auth.php
+    anchor: "// shardev:providers"
+    position: before
+    content: |
+      '{{ app.provider }}' => ['driver' => 'eloquent', 'model' => {{ app.model_class }}::class],
+  - type: insert
+    file: config/authentications.php
+    anchor: "// shardev:apps"
+    position: before
+    content: |
+      '{{ app.key }}' => [
+          'guard' => '{{ app.api_guard }}',
+          'session_guard' => '{{ app.session_guard }}',
+          'provider' => '{{ app.provider }}',
+          'model' => {{ app.model_class }}::class,
+      ],
+  - type: insert
+    file: config/supports.php
+    anchor: "// shardev:permission-guards"
+    position: before
+    content: "'{{ app.api_guard }}',"
+  - type: insert
+    file: config/supports.php
+    anchor: "// shardev:permission-defaults"
+    position: before
+    content: "'{{ app.api_guard }}' => ['role' => 'admin', 'actions' => ['manage']],"
+  - type: insert
+    file: config/shardevcom.php
+    anchor: "// shardev:roles"
+    position: before
+    content: "'{{ app.api_guard }}' => ['admin', 'user'],"
+  - type: insert
+    file: config/shardevcom.php
+    anchor: "// shardev:permissions"
+    position: before
+    content: |
+      '{{ app.api_guard }}' => [
+          'home' => ['admin' => ['manage'], 'user' => ['view']],
+          'roles' => ['admin' => ['manage']],
+          'permissions' => ['admin' => ['manage']],
+      ],

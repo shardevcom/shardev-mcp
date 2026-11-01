@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "spike": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["spikes/sdk-server.mjs"]
+    }
+  }
+}
