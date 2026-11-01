@@ -5,6 +5,7 @@ import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
 import { appCreate, appPlan } from "./ops/app.js";
 import { opsServices, opsTasks } from "./ops/ecs.js";
 import { logRead } from "./ops/log-read.js";
+import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsLogs } from "./ops/logs.js";
 import { opsStatus } from "./ops/status.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
@@ -215,6 +216,7 @@ function humanOps(cmd: string, o: ToolOutcome): string {
 
 /** Ejecuta `shardev ops ...` (solo lectura). Devuelve el código de salida. */
 export async function runOps(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
+  await purgeExpiredOpsLogs(ctx);
   const p = parseArgs(argv);
   const cmd = p.positional[0];
   const json = p.flags.get("json") === true;

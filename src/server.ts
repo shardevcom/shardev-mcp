@@ -1,9 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { z } from "zod";
 import { createContext, type Ctx, type ToolOutcome } from "./ops/context.js";
 import { annotationsForTier, APP_CREATE, APP_PLAN, LOG_READ, metaForTier, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
 import { logRead } from "./ops/log-read.js";
+import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsStatus } from "./ops/status.js";
 import { opsServices, opsTasks } from "./ops/ecs.js";
 import { opsLogs } from "./ops/logs.js";
@@ -198,8 +200,9 @@ export function createServer(options: { paths?: Paths; runner?: Runner; template
   return { server, ctx };
 }
 
-export async function serve(): Promise<void> {
-  const { server, ctx } = createServer();
-  await server.connect(new StdioServerTransport());
+export async function serve(options: { paths?: Paths; transport?: Transport } = {}): Promise<void> {
+  const { server, ctx } = createServer(options.paths ? { paths: options.paths } : {});
+  await purgeExpiredOpsLogs(ctx); // best-effort: no falla ni retrasa el arranque más que un readdir
+  await server.connect(options.transport ?? new StdioServerTransport());
   stderrLog(ctx, `servidor MCP listo (stdio) v${SERVER_VERSION}`);
 }

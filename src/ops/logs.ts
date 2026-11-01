@@ -1,6 +1,7 @@
 import { ShardevError } from "../core/errors.js";
 import { DEFAULT_LOG_GROUP_PREFIX } from "../core/manifest.js";
 import { UNTRUSTED_NOTICE } from "../core/output.js";
+import { OPS_LOGS_SLUG, purgeExpiredOpsLogs } from "./log-retention.js";
 import type { Ctx, ToolOutcome } from "./context.js";
 import { asArray, asRecord, gateRead, num, runRead, str } from "./read-gate.js";
 
@@ -24,8 +25,6 @@ export const LOGS_SCAN_CAP = 1000;
 export const LOGS_MAX_SCAN_CALLS = 24;
 export const LOGS_FIRST_WINDOW_MINUTES = 5;
 /** Prefijo (ya normalizado) con el que LogStore nombra los archivos de esta herramienta. */
-export const OPS_LOGS_SLUG = "ops-logs-";
-export const OPS_LOGS_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** El grupo de logs de un servicio ECS es `<log_group_prefix><servicio>` (por defecto `/ecs/<servicio>`). */
 export const logGroupFor = (service: string, prefix: string = DEFAULT_LOG_GROUP_PREFIX): string => `${prefix}${service}`;
@@ -76,11 +75,7 @@ export async function opsLogs(ctx: Ctx, args: OpsLogsArgs): Promise<ToolOutcome>
   const group = logGroupFor(service, gate.env.log_group_prefix);
 
   // Retención: best-effort, nunca hace fallar la llamada.
-  try {
-    await ctx.logs.purgeOlderThan(OPS_LOGS_SLUG, OPS_LOGS_RETENTION_MS);
-  } catch {
-    /* sin efecto */
-  }
+  await purgeExpiredOpsLogs(ctx);
 
   const nowMs = ctx.now().getTime();
   const startMs = nowMs - sinceMinutes * 60_000;
