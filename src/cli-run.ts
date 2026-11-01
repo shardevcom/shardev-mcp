@@ -17,7 +17,7 @@ export const USAGE = `${CLI_NAME} ${CLI_VERSION}
 
 Uso:
   ${CLI_NAME} mcp serve                                   Inicia el servidor MCP por stdio
-  ${CLI_NAME} project plan --spec <spec.json|-> --target <dir> [--json]
+  ${CLI_NAME} project plan --spec <spec.json|-> --target <dir> [--detail summary|full] [--json]
   ${CLI_NAME} project create --plan-id <plan_id> [--json]
   ${CLI_NAME} project verify --project <nombre> [--json]
   ${CLI_NAME} app plan --project-path <dir> --key <key> --user-type <new|existing> [--provider <p>] [--table <t>]
@@ -53,7 +53,7 @@ interface Parsed {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit", "ref", "grep", "context", "offset"]);
+const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit", "detail", "ref", "grep", "context", "offset"]);
 
 function parseArgs(argv: string[]): Parsed {
   const positional: string[] = [];
@@ -91,7 +91,7 @@ function human(cmd: string, o: ToolOutcome): string {
     return o.text;
   }
   if (cmd === "plan") {
-    const files = Array.isArray(j.files_to_create) ? j.files_to_create.length : 0;
+    const files = Array.isArray(j.files_to_create) ? j.files_to_create.length : typeof (j.files_summary as { total_files?: unknown } | undefined)?.total_files === "number" ? (j.files_summary as { total_files: number }).total_files : 0;
     const conflicts = Array.isArray(j.conflicts) ? (j.conflicts as string[]) : [];
     const cmds = Array.isArray(j.commands) ? (j.commands as Array<{ name: string; runs_in: string }>) : [];
     return [
@@ -124,7 +124,7 @@ export async function runProject(argv: string[], io: CliIo, ctx: Ctx = createCon
     } catch (e) {
       throw new ShardevError("invalid_input", `El spec no es JSON válido: ${(e as Error).message.slice(0, 80)}`);
     }
-    outcome = await projectPlan(ctx, { spec, target: need(p, "target") });
+    outcome = await projectPlan(ctx, { spec, target: need(p, "target"), detail: strFlag(p, "detail") });
   } else if (cmd === "create") {
     outcome = await projectCreate(ctx, { plan_id: need(p, "plan-id") });
   } else if (cmd === "verify") {

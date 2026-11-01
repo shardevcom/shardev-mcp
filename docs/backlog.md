@@ -15,7 +15,6 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 | ADJ-01 | Probar las herramientas `ops_*` a través del protocolo MCP con AWS real | Hasta ahora solo se probaron por CLI; el protocolo solo tiene tests | Bajo |
 | ADJ-02 | Probar `log_read` sobre logs reales y medir la redacción | Solo se probó con datos simulados | Bajo |
 | ADJ-05 | Evaluar enmascarar datos personales en logs guardados | La redacción solo cubre secretos | Medio |
-| ADJ-08 | Resumir `project_plan` por capa | Devuelve cientos de rutas, demasiado para un LLM | Bajo |
 | ADJ-09 | Registrar en auditoría las ejecuciones por CLI, o corregir la ayuda que afirma que ya se registran | Solo el servidor MCP escribe en `audit.jsonl`; es requisito antes de BASE-01, porque las operaciones T3 las ejecuta una persona por CLI | Bajo |
 
 ## 2. Base de cambios
