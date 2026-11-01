@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { runOps, runProject, USAGE, type CliIo } from "../src/cli-run.js";
 import { createContext } from "../src/ops/context.js";
+import { logRead } from "../src/ops/log-read.js";
 import { awsRunner, cwLogs } from "./helpers/aws-fixtures.js";
 import { OPS_YAML_SERVICES, cleanup, registerDemoProject, tempPaths } from "./helpers/fixtures.js";
 import { SPEC, setup } from "./helpers/gen-fixtures.js";
@@ -115,7 +116,57 @@ describe("shardev ops (solo lectura, mismas funciones que las herramientas)", ()
     expect(runner.calls).toHaveLength(0);
   });
 
+  describe("ops log-read", () => {
+    async function withLog() {
+      const s = await opsSetup();
+      const l = await s.ctx.logs.write("demo", Array.from({ length: 30 }, (_, i) => `linea ${i + 1}${i === 9 ? " ERROR boom" : ""}`).join("\n"));
+      return { ...s, ref: l.ref };
+    }
+
+    test("ref válido, grep y paginación; --json es exactamente el texto de la herramienta", async () => {
+      const { ctx, ref } = await withLog();
+      const a = io();
+      expect(await runOps(["log-read", "--ref", ref, "--json"], a.io, ctx)).toBe(0);
+      expect(a.out.join("")).toBe(`${(await logRead(ctx, { ref })).text}\n`);
+      expect(a.out.join("")).toContain("<untrusted-data");
+      expect(a.out.join("")).toContain("Contenido no confiable");
+
+      const g = io();
+      expect(await runOps(["log-read", "--ref", ref, "--grep", "error", "--context", "1", "--json"], g.io, ctx)).toBe(0);
+      expect(g.out.join("")).toBe(`${(await logRead(ctx, { ref, grep: "error", context: 1 })).text}\n`);
+      expect(g.out.join("")).toContain("10: linea 10 ERROR boom");
+      expect(g.out.join("")).toContain("9: linea 9");
+
+      const p = io();
+      expect(await runOps(["log-read", "--ref", ref, "--offset", "5", "--limit", "3"], p.io, ctx)).toBe(0);
+      expect(p.out.join("")).toBe(`${(await logRead(ctx, { ref, offset: 5, limit: 3 })).text}\n`);
+      expect(p.out.join("")).toMatch(/5: .*\n6: .*\n7: /);
+      expect(p.out.join("")).not.toContain("8: ");
+    });
+
+    test("ref inválida, traversal e inexistente: exit 1 con el mismo texto de la herramienta", async () => {
+      const { ctx } = await withLog();
+      for (const ref of ["../../etc/passwd", "/etc/passwd", "..", "no-es-un-ref.log", "x".repeat(131)]) {
+        const o = io();
+        expect(await runOps(["log-read", "--ref", ref], o.io, ctx)).toBe(1);
+        if (ref.length <= 130) expect(o.out.join("")).toBe(`${(await logRead(ctx, { ref })).text}\n`);
+      }
+    });
+
+    test("flags: --ref obligatorio, no enteros y fuera de rango rechazados", async () => {
+      const { ctx, ref } = await withLog();
+      await expect(runOps(["log-read"], io().io, ctx)).rejects.toThrow(/Falta --ref/);
+      for (const f of ["limit", "offset", "context"]) {
+        for (const v of ["abc", "1.5", "-1"]) await expect(runOps(["log-read", "--ref", ref, `--${f}`, v], io().io, ctx)).rejects.toThrow(/número entero/);
+      }
+      for (const [f, v] of [["limit", "0"], ["limit", "501"], ["context", "6"], ["offset", "0"]] as const) {
+        const o = io();
+        expect(await runOps(["log-read", "--ref", ref, `--${f}`, v], o.io, ctx)).toBe(1);
+      }
+    });
+  });
+
   test("la ayuda documenta ops", () => {
-    for (const w of ["ops status", "ops services", "ops tasks", "ops logs", "--since-minutes", "--filter", "--limit"]) expect(USAGE).toContain(w);
+    for (const w of ["ops status", "ops services", "ops tasks", "ops logs", "ops log-read", "--ref", "--grep", "--since-minutes", "--filter", "--limit"]) expect(USAGE).toContain(w);
   });
 });

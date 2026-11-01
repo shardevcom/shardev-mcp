@@ -6,7 +6,7 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 
 ## Ya disponible
 
-`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs`, `shardev ops status|services|tasks|logs`, `project_*` y `app_*`.
+`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs`, `shardev ops status|services|tasks|logs|log-read`, `project_*` y `app_*`.
 
 ## 1. Ajustes a lo existente
 
@@ -14,7 +14,6 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 |---|---|---|---|
 | ADJ-01 | Probar las herramientas `ops_*` a través del protocolo MCP con AWS real | Hasta ahora solo se probaron por CLI; el protocolo solo tiene tests | Bajo |
 | ADJ-02 | Probar `log_read` sobre logs reales y medir la redacción | Solo se probó con datos simulados | Bajo |
-| ADJ-03 | Añadir `shardev ops log-read` | La CLI no puede leer un `log_ref` | Bajo |
 | ADJ-04 | Hacer configurable el grupo de logs por entorno | `/ecs/<servicio>` es una convención fija | Bajo |
 | ADJ-05 | Evaluar enmascarar datos personales en logs guardados | La redacción solo cubre secretos | Medio |
 | ADJ-06 | Purgar las copias de `ops_logs` sin depender de una nueva llamada | Sin nuevas llamadas, las copias vencidas no se borran | Bajo |
@@ -70,7 +69,7 @@ Requisito de todas las operaciones que modifican AWS.
 
 ## Orden recomendado
 
-1. ADJ-01 a ADJ-03, ENV-01 y CI-01.
+1. ADJ-01 y ADJ-02, ENV-01 y CI-01.
 2. BASE-01, BASE-02 y SVC-01 como primera operación que cambia AWS; luego SVC-02.
 3. Resto de ENV y CI, LOC y REL.
 4. SEC, DEP y TPL-01.
