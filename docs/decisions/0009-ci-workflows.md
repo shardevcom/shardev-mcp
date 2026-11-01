@@ -34,4 +34,4 @@ No se comprueba el estado de git (si el workflow está versionado, si hay cambio
 
 ## Fuera de alcance
 
-La plantilla por defecto (TPL-01), `--no-branch` para volver a "solo manual" un entorno que no es producción, variables y secretos del GitHub Environment (CI-02), auditoría de las ejecuciones por CLI (ADJ-09).
+La plantilla por defecto (TPL-01), `--no-branch` para volver a "solo manual" un entorno que no es producción, variables y secretos del GitHub Environment (CI-02).

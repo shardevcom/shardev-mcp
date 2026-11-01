@@ -6,14 +6,13 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 
 ## Ya disponible
 
-`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `ops_env_check` (ENV-01: validación local de un entorno, sin AWS; `root` opcional en `projects.yaml`), `ops_ci_check` y `ops_ci_generate` (CI-01: workflows de despliegue desde una plantilla del proyecto; en producción el MCP no escribe), `shardev ops status|services|tasks|logs|env-check|ci-check|ci-generate|log-read`, `project_*` y `app_*`.
+`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `ops_env_check` (ENV-01: validación local de un entorno, sin AWS; `root` opcional en `projects.yaml`), `ops_ci_check` y `ops_ci_generate` (CI-01: workflows de despliegue desde una plantilla del proyecto; en producción el MCP no escribe), `shardev ops status|services|tasks|logs|env-check|ci-check|ci-generate|log-read`, `project_*` y `app_*`. Las ejecuciones por CLI también quedan en `audit.jsonl` (`source: "cli"`; ADJ-09).
 
 ## 1. Ajustes a lo existente
 
 | ID | Tarea | Por qué | Esfuerzo |
 |---|---|---|---|
 | ADJ-02 | Medir la redacción con logs reales que contengan datos sensibles | La lectura real ya funciona, pero las muestras no tenían nada que enmascarar, así que no prueban la redacción | Bajo |
-| ADJ-09 | Registrar en auditoría las ejecuciones por CLI, o corregir la ayuda que afirma que ya se registran | Solo el servidor MCP escribe en `audit.jsonl`; es requisito antes de BASE-01, porque las operaciones T3 las ejecuta una persona por CLI | Bajo |
 
 ## 2. Base de cambios
 
@@ -62,7 +61,7 @@ Requisito de todas las operaciones que modifican AWS.
 
 ## Orden recomendado
 
-1. ADJ-02 y ADJ-09.
+1. ADJ-02.
 2. BASE-01, BASE-02 y SVC-01 como primera operación que cambia AWS; luego SVC-02.
 3. Resto de ENV y CI, LOC y REL.
 4. SEC, DEP y TPL-01.

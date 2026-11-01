@@ -32,7 +32,7 @@ Los mensajes contienen solo nombres de variables, rutas relativas a la raíz, n�
 
 ## Auditoría
 
-Al ser T0 pasa por el mismo envoltorio MCP que el resto y queda en `audit.jsonl` con `project` y `env` (nunca valores). La CLI no audita (ADJ-09 del backlog), como las demás herramientas `ops`; no se cambia aquí.
+Al ser T0 pasa por el mismo envoltorio MCP que el resto y queda en `audit.jsonl` con `project` y `env` (nunca valores). La CLI también lo registra, con `source: "cli"` (ADJ-09).
 
 ## Fuera de alcance
 

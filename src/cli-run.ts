@@ -9,6 +9,8 @@ import { purgeExpiredOpsLogs } from "./ops/log-retention.js";
 import { opsLogs } from "./ops/logs.js";
 import { opsEnvCheck } from "./ops/env-check.js";
 import { opsCiCheck, opsCiGenerate } from "./ops/ci.js";
+import { recordCall } from "./ops/audit-call.js";
+import { APP_CREATE, APP_PLAN, LOG_READ, OPS_CI_CHECK, OPS_CI_GENERATE, OPS_ENV_CHECK, OPS_LOGS, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
 import { opsStatus } from "./ops/status.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 
@@ -93,6 +95,59 @@ function need(p: Parsed, name: string): string {
   return v;
 }
 
+/** Estado de una invocación de la CLI que `audited` necesita para registrarla. */
+interface Call {
+  p?: Parsed;
+  /** Argumentos tal como se pasan a la función de la herramienta (los mismos que recibiría por MCP). */
+  args?: Record<string, unknown>;
+}
+
+/**
+ * Ejecuta `body` y registra una entrada de auditoría con `source: "cli"` (misma operación del catálogo,
+ * mismo nivel y mismo registro que el servidor MCP). Si `body` lanza, registra `rejected` (entrada
+ * inválida) o `error` y relanza el mismo error. Sin operación identificable (subcomando desconocido) no registra.
+ * Un fallo al escribir la auditoría solo avisa por `io.err`.
+ */
+async function audited(ctx: Ctx, io: CliIo, table: Record<string, OperationDef>, argv: string[], call: Call, body: () => Promise<ToolOutcome>): Promise<ToolOutcome> {
+  const started = Date.now();
+  const opNow = (): OperationDef | undefined => opFor(table, call.p?.positional[0] ?? argv[0]);
+  const warn = (m: string): void => io.err(`[shardev] ${ctx.redactor.redact(m)}\n`);
+  let outcome: ToolOutcome;
+  try {
+    outcome = await body();
+  } catch (e) {
+    const op = opNow();
+    if (op) {
+      const rejected = e instanceof ShardevError;
+      const flag = (n: string): string | undefined => {
+        const v = call.p?.flags.get(n);
+        return typeof v === "string" ? v : undefined;
+      };
+      await recordCall(
+        ctx,
+        op,
+        {
+          source: "cli",
+          args: call.args ?? (call.p ? Object.fromEntries(call.p.flags) : undefined),
+          outcome: { decision: rejected ? "rejected" : "error", project: flag("project"), env: flag("env") },
+          started,
+          exitCode: rejected && e.code === "invalid_input" ? 2 : 1,
+        },
+        warn,
+      );
+    }
+    throw e;
+  }
+  const op = opNow();
+  if (op) await recordCall(ctx, op, { source: "cli", args: call.args, outcome, started, exitCode: outcome.isError ? 1 : 0 }, warn);
+  return outcome;
+}
+
+const PROJECT_OPS: Record<string, OperationDef> = { plan: PROJECT_PLAN, create: PROJECT_CREATE, verify: PROJECT_VERIFY };
+const APP_OPS: Record<string, OperationDef> = { plan: APP_PLAN, create: APP_CREATE };
+const OPS_OPS: Record<string, OperationDef> = { status: OPS_STATUS, services: OPS_SERVICES, tasks: OPS_TASKS, logs: OPS_LOGS, "env-check": OPS_ENV_CHECK, "ci-check": OPS_CI_CHECK, "ci-generate": OPS_CI_GENERATE, "log-read": LOG_READ };
+const opFor = (table: Record<string, OperationDef>, cmd: string | undefined): OperationDef | undefined => (cmd !== undefined && Object.hasOwn(table, cmd) ? table[cmd] : undefined);
+
 /** Salida humana breve a partir del JSON de la herramienta. */
 function human(cmd: string, o: ToolOutcome): string {
   if (o.isError && !o.text.trimStart().startsWith("{")) return o.text;
@@ -123,9 +178,16 @@ function human(cmd: string, o: ToolOutcome): string {
 
 /** Ejecuta `shardev project ...`. Devuelve el código de salida. `ctx` se inyecta en tests. */
 export async function runProject(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
-  const p = parseArgs(argv);
+  const call: Call = {};
+  const outcome = await audited(ctx, io, PROJECT_OPS, argv, call, () => projectBody(argv, io, ctx, call));
+  const json = call.p?.flags.get("json") === true;
+  io.out(`${json ? outcome.text : human(call.p?.positional[0] ?? "", outcome)}\n`);
+  return outcome.isError ? 1 : 0;
+}
+
+async function projectBody(argv: string[], io: CliIo, ctx: Ctx, call: Call): Promise<ToolOutcome> {
+  const p = (call.p = parseArgs(argv));
   const cmd = p.positional[0];
-  const json = p.flags.get("json") === true;
   let outcome: ToolOutcome;
   if (cmd === "plan") {
     const specArg = need(p, "spec");
@@ -136,23 +198,29 @@ export async function runProject(argv: string[], io: CliIo, ctx: Ctx = createCon
     } catch (e) {
       throw new ShardevError("invalid_input", `El spec no es JSON válido: ${(e as Error).message.slice(0, 80)}`);
     }
-    outcome = await projectPlan(ctx, { spec, target: need(p, "target"), detail: strFlag(p, "detail") });
+    outcome = await projectPlan(ctx, (call.args = { spec, target: need(p, "target"), detail: strFlag(p, "detail") }));
   } else if (cmd === "create") {
-    outcome = await projectCreate(ctx, { plan_id: need(p, "plan-id") });
+    outcome = await projectCreate(ctx, (call.args = { plan_id: need(p, "plan-id") }));
   } else if (cmd === "verify") {
-    outcome = await projectVerify(ctx, { project: need(p, "project") });
+    outcome = await projectVerify(ctx, (call.args = { project: need(p, "project") }));
   } else {
     throw new ShardevError("invalid_input", `Subcomando de project desconocido: ${cmd ?? "(ninguno)"}`);
   }
-  io.out(`${json ? outcome.text : human(cmd, outcome)}\n`);
-  return outcome.isError ? 1 : 0;
+  return outcome;
 }
 
 /** Ejecuta `shardev app ...`. Devuelve el código de salida. */
 export async function runApp(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
-  const p = parseArgs(argv);
+  const call: Call = {};
+  const outcome = await audited(ctx, io, APP_OPS, argv, call, () => appBody(argv, ctx, call));
+  const json = call.p?.flags.get("json") === true;
+  io.out(`${json ? outcome.text : human(call.p?.positional[0] ?? "", outcome)}\n`);
+  return outcome.isError ? 1 : 0;
+}
+
+async function appBody(argv: string[], ctx: Ctx, call: Call): Promise<ToolOutcome> {
+  const p = (call.p = parseArgs(argv));
   const cmd = p.positional[0];
-  const json = p.flags.get("json") === true;
   let outcome: ToolOutcome;
   if (cmd === "plan") {
     const opt = (name: string): string | undefined => {
@@ -171,14 +239,13 @@ export async function runApp(argv: string[], io: CliIo, ctx: Ctx = createContext
       if (v !== undefined) input[field] = v;
     }
     if (portArg !== undefined) input.port = Number(portArg);
-    outcome = await appPlan(ctx, input);
+    outcome = await appPlan(ctx, (call.args = input));
   } else if (cmd === "create") {
-    outcome = await appCreate(ctx, { plan_id: need(p, "plan-id") });
+    outcome = await appCreate(ctx, (call.args = { plan_id: need(p, "plan-id") }));
   } else {
     throw new ShardevError("invalid_input", `Subcomando de app desconocido: ${cmd ?? "(ninguno)"}`);
   }
-  io.out(`${json ? outcome.text : human(cmd, outcome)}\n`);
-  return outcome.isError ? 1 : 0;
+  return outcome;
 }
 
 function intFlag(p: Parsed, name: string): number | undefined {
@@ -245,36 +312,45 @@ function humanOps(cmd: string, o: ToolOutcome): string {
 /** Ejecuta `shardev ops ...` (solo lectura). Devuelve el código de salida. */
 export async function runOps(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
   await purgeExpiredOpsLogs(ctx);
-  const p = parseArgs(argv);
+  const call: Call = {};
+  const outcome = await audited(ctx, io, OPS_OPS, argv, call, () => opsBody(argv, ctx, call));
+  const cmd = call.p?.positional[0] ?? "";
+  const json = call.p?.flags.get("json") === true;
+  io.out(`${json || cmd === "status" ? ctx.redactor.redact(outcome.text) : ctx.redactor.redact(humanOps(cmd, outcome))}\n`);
+  return outcome.isError ? 1 : 0;
+}
+
+async function opsBody(argv: string[], ctx: Ctx, call: Call): Promise<ToolOutcome> {
+  const p = (call.p = parseArgs(argv));
   const cmd = p.positional[0];
-  const json = p.flags.get("json") === true;
   const project = strFlag(p, "project");
   const env = strFlag(p, "env");
   let outcome: ToolOutcome;
   if (cmd === "status") {
-    outcome = await opsStatus(ctx, { project, env });
+    outcome = await opsStatus(ctx, (call.args = { project, env }));
   } else if (cmd === "services") {
-    outcome = await opsServices(ctx, { project: need(p, "project"), env: need(p, "env"), service: strFlag(p, "service") });
+    outcome = await opsServices(ctx, (call.args = { project: need(p, "project"), env: need(p, "env"), service: strFlag(p, "service") }));
   } else if (cmd === "tasks") {
-    outcome = await opsTasks(ctx, { project: need(p, "project"), env: need(p, "env"), service: need(p, "service"), status: strFlag(p, "status") });
+    outcome = await opsTasks(ctx, (call.args = { project: need(p, "project"), env: need(p, "env"), service: need(p, "service"), status: strFlag(p, "status") }));
   } else if (cmd === "logs") {
-    outcome = await opsLogs(ctx, {
+    outcome = await opsLogs(ctx, (call.args = {
       project: need(p, "project"),
       env: need(p, "env"),
       service: need(p, "service"),
       since_minutes: intFlag(p, "since-minutes"),
       filter: strFlag(p, "filter"),
       limit: intFlag(p, "limit"),
-    });
+    }));
   } else if (cmd === "env-check") {
-    outcome = await opsEnvCheck(ctx, { project: need(p, "project"), env: need(p, "env") });
+    outcome = await opsEnvCheck(ctx, (call.args = { project: need(p, "project"), env: need(p, "env") }));
   } else if (cmd === "ci-check" || cmd === "ci-generate") {
     if (p.flags.get("mobile") === true && p.flags.get("no-mobile") === true) throw new ShardevError("invalid_input", "--mobile y --no-mobile son excluyentes");
-    const ci = { project: need(p, "project"), env: need(p, "env"), branch: strFlag(p, "branch"), mobile: p.flags.get("mobile") === true ? true : p.flags.get("no-mobile") === true ? false : undefined };
+    const ci = (call.args = { project: need(p, "project"), env: need(p, "env"), branch: strFlag(p, "branch"), mobile: p.flags.get("mobile") === true ? true : p.flags.get("no-mobile") === true ? false : undefined });
     // La CLI la ejecuta una persona: puede escribir cualquier entorno (el MCP nunca escribe producción).
     outcome = cmd === "ci-check" ? await opsCiCheck(ctx, ci) : await opsCiGenerate(ctx, ci, { allowProduction: true });
   } else if (cmd === "log-read") {
     const args = { ref: need(p, "ref"), grep: strFlag(p, "grep"), context: intFlag(p, "context"), offset: intFlag(p, "offset"), limit: intFlag(p, "limit") };
+    call.args = args;
     // Mismos límites que el esquema de la herramienta MCP log_read.
     const bad =
       args.ref.length > 130 ? "--ref admite hasta 130 caracteres"
@@ -283,14 +359,10 @@ export async function runOps(argv: string[], io: CliIo, ctx: Ctx = createContext
       : args.offset !== undefined && args.offset < 1 ? "--offset debe ser >= 1"
       : args.limit !== undefined && (args.limit < 1 || args.limit > 500) ? "--limit debe estar entre 1 y 500"
       : undefined;
-    if (bad) {
-      io.out(`${bad}\n`);
-      return 1;
-    }
+    if (bad) return { text: bad, isError: true, decision: "rejected", exitCode: 1 };
     outcome = await logRead(ctx, args);
   } else {
     throw new ShardevError("invalid_input", `Subcomando de ops desconocido: ${cmd ?? "(ninguno)"}`);
   }
-  io.out(`${json || cmd === "status" ? ctx.redactor.redact(outcome.text) : ctx.redactor.redact(humanOps(cmd, outcome))}\n`);
-  return outcome.isError ? 1 : 0;
+  return outcome;
 }
