@@ -10,8 +10,10 @@ import { opsLogs } from "./ops/logs.js";
 import { opsEnvCheck } from "./ops/env-check.js";
 import { opsCiCheck, opsCiGenerate } from "./ops/ci.js";
 import { recordCall } from "./ops/audit-call.js";
-import { APP_CREATE, APP_PLAN, LOG_READ, OPS_CI_CHECK, OPS_CI_GENERATE, OPS_ENV_CHECK, OPS_LOGS, OPS_REDEPLOY, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
+import { APP_CREATE, APP_PLAN, LOG_READ, OPS_CI_CHECK, OPS_CI_GENERATE, OPS_ENV_CHECK, OPS_LOGS, OPS_REDEPLOY, OPS_SCALE, OPS_SERVICES, OPS_STATUS, OPS_TASKS, PROJECT_CREATE, PROJECT_PLAN, PROJECT_VERIFY, type OperationDef } from "./ops/catalog.js";
 import { cliRedeploy } from "./ops/redeploy-exec.js";
+import { MAX_DESIRED_COUNT } from "./ops/scale.js";
+import { cliScale } from "./ops/scale-exec.js";
 import { opsStatus } from "./ops/status.js";
 import { projectCreate, projectPlan, projectVerify } from "./ops/project.js";
 
@@ -36,6 +38,7 @@ Uso:
   ${CLI_NAME} ops ci-check --project <nombre> --env <entorno> [--branch <rama>] [--mobile|--no-mobile] [--json]
   ${CLI_NAME} ops ci-generate --project <nombre> --env <entorno> [--branch <rama>] [--mobile|--no-mobile] [--json]
   ${CLI_NAME} ops redeploy --project <nombre> --env <entorno> (--service <servicio> | --all) [--json]
+  ${CLI_NAME} ops scale --project <nombre> --env <entorno> (--service <servicio> | --all) --desired-count <0-20> [--json]
   ${CLI_NAME} ops log-read --ref <log_ref> [--grep <texto>] [--context <0-5>] [--offset <n>] [--limit <1-500>] [--json]
   ${CLI_NAME} --version | --help
 
@@ -44,7 +47,7 @@ project_create y project_verify (misma política, mismas raíces permitidas, mis
 app plan/create usan las mismas funciones que las herramientas app_plan y app_create (añadir una app a un
 proyecto ya generado; --features admite otp, social, mfa e invitations; mfa no se combina con otp ni social).
 ops status|services|tasks|logs|log-read usan las mismas funciones que las herramientas ops_status, ops_services, ops_tasks y
-ops_logs y log_read (solo lectura; misma política y auditoría; redeploy es la excepción, ver abajo). --env es obligatorio en services/tasks/logs (sin default) y los
+ops_logs y log_read (solo lectura; misma política y auditoría; redeploy es la excepción, y scale también; ver abajo). --env es obligatorio en services/tasks/logs (sin default) y los
 servicios deben estar declarados en \`services\` del entorno en ops.yaml. ops logs no imprime el contenido: lo guarda
 redactado y muestra el log_ref para leerlo con \`ops log-read --ref <log_ref>\` (o la herramienta MCP log_read).
 ops env-check usa la misma función que la herramienta ops_env_check: valida sin conexión .aws/env/<entorno>/ y env.schema
@@ -54,10 +57,13 @@ ops ci-check|ci-generate usan las mismas funciones que ops_ci_check y ops_ci_gen
 está al día; se ignora la cabecera generada). ci-generate escribe de forma atómica, también en producción (a diferencia de la
 herramienta MCP); no hace commit ni push: revisa y versiona el archivo. Sin --branch ni --mobile/--no-mobile se reutilizan las
 opciones guardadas en el workflow actual (línea "# Opciones:").
-ops redeploy CAMBIA AWS (ecs update-service --force-new-deployment, servicio a servicio, sin esperar). Es la única orden de ops que no es de solo
-lectura: exige una terminal interactiva (stdin y stderr TTY) y escribir la frase <proyecto>/<entorno>; no existe --yes ni --force. Escribe una entrada
+ops redeploy CAMBIA AWS (ecs update-service --force-new-deployment, servicio a servicio, sin esperar). Junto con ops scale son las únicas órdenes de ops que
+no son de solo lectura: exige una terminal interactiva (stdin y stderr TTY) y escribir la frase <proyecto>/<entorno>; no existe --yes ni --force. Escribe una entrada
 de auditoría de intención antes de cambiar (si falla, no cambia nada) y otra de resultado. Se detiene en el primer fallo y no revierte. "Iniciado" no es
 "completado": comprueba con ops services. Un timeout se informa como estado desconocido.
+ops scale CAMBIA AWS (ecs update-service --desired-count N): mismas reglas que redeploy (TTY, frase <proyecto>/<entorno>, auditoría de intención, parar en el
+primer fallo). Antes de preguntar lee el estado actual y no toca los servicios que ya están en N; con N=0 los servicios quedan fuera de línea y la
+frase es <proyecto>/<entorno>/apagar. No detecta autoscaling. AWS aceptar el valor no significa que las tareas ya estén en marcha o detenidas.
 ops log-read no necesita --project ni --env: lee solo por referencia y marca el contenido como dato no confiable.
 Con --json la salida es exactamente el JSON de la herramienta; el código de salida es 1 si falla.
 `;
@@ -77,7 +83,7 @@ interface Parsed {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(["spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit", "detail", "ref", "grep", "context", "offset", "branch"]);
+const VALUE_FLAGS = new Set(["desired-count", "spec", "target", "plan-id", "project", "project-path", "key", "user-type", "provider", "table", "model", "api-guard", "session-guard", "port", "build-dir", "features", "social-providers", "env", "service", "status", "since-minutes", "filter", "limit", "detail", "desired-count", "ref", "grep", "context", "offset", "branch"]);
 
 function parseArgs(argv: string[]): Parsed {
   const positional: string[] = [];
@@ -158,7 +164,7 @@ async function audited(ctx: Ctx, io: CliIo, table: Record<string, OperationDef>,
 
 const PROJECT_OPS: Record<string, OperationDef> = { plan: PROJECT_PLAN, create: PROJECT_CREATE, verify: PROJECT_VERIFY };
 const APP_OPS: Record<string, OperationDef> = { plan: APP_PLAN, create: APP_CREATE };
-const OPS_OPS: Record<string, OperationDef> = { status: OPS_STATUS, services: OPS_SERVICES, tasks: OPS_TASKS, logs: OPS_LOGS, "env-check": OPS_ENV_CHECK, "ci-check": OPS_CI_CHECK, "ci-generate": OPS_CI_GENERATE, redeploy: OPS_REDEPLOY, "log-read": LOG_READ };
+const OPS_OPS: Record<string, OperationDef> = { status: OPS_STATUS, services: OPS_SERVICES, tasks: OPS_TASKS, logs: OPS_LOGS, "env-check": OPS_ENV_CHECK, "ci-check": OPS_CI_CHECK, "ci-generate": OPS_CI_GENERATE, redeploy: OPS_REDEPLOY, scale: OPS_SCALE, "log-read": LOG_READ };
 const opFor = (table: Record<string, OperationDef>, cmd: string | undefined): OperationDef | undefined => (cmd !== undefined && Object.hasOwn(table, cmd) ? table[cmd] : undefined);
 
 /** Salida humana breve a partir del JSON de la herramienta. */
@@ -277,12 +283,12 @@ function strFlag(p: Parsed, name: string): string | undefined {
 
 /** Salida humana breve de las lecturas AWS; con --json se imprime el JSON de la herramienta tal cual. */
 function humanOps(cmd: string, o: ToolOutcome): string {
-  if (cmd === "redeploy") {
+  if (cmd === "redeploy" || cmd === "scale") {
     try {
-      const j = JSON.parse(o.text) as { project: string; env: string; production: boolean; services: Array<{ service: string; state: string; deployment_id?: string; reason?: string }>; next: string };
+      const j = JSON.parse(o.text) as { project: string; env: string; production: boolean; services: Array<{ service: string; state: string; deployment_id?: string; desired_count?: number; reason?: string }>; next: string };
       return [
-        `${o.isError ? "FALLÓ" : "INICIADO"}: ${j.project}/${j.env}${j.production ? " (PRODUCCIÓN)" : ""}`,
-        ...j.services.map((x) => `  ${x.state.padEnd(13)} ${x.service}${x.deployment_id ? `  ${x.deployment_id}` : ""}${x.reason ? `  ${x.reason}` : ""}`),
+        `${o.isError ? "FALLÓ" : j.services.every((x) => x.state === "unchanged") ? "SIN CAMBIOS" : "INICIADO"}: ${j.project}/${j.env}${j.production ? " (PRODUCCIÓN)" : ""}`,
+        ...j.services.map((x) => `  ${x.state.padEnd(13)} ${x.service}${x.deployment_id ? `  ${x.deployment_id}` : ""}${x.desired_count !== undefined ? `  desired ${x.desired_count}` : ""}${x.reason ? `  ${x.reason}` : ""}`),
         j.next,
       ].join("\n");
     } catch {
@@ -334,7 +340,7 @@ function humanOps(cmd: string, o: ToolOutcome): string {
   return o.text;
 }
 
-/** Ejecuta `shardev ops ...` (lecturas y, con `redeploy`, un cambio en AWS). Devuelve el código de salida. */
+/** Ejecuta `shardev ops ...` (lecturas y, con `redeploy` y `scale`, un cambio en AWS). Devuelve el código de salida. */
 export async function runOps(argv: string[], io: CliIo, ctx: Ctx = createContext(defaultPaths())): Promise<number> {
   await purgeExpiredOpsLogs(ctx);
   const call: Call = {};
@@ -373,16 +379,22 @@ async function opsBody(argv: string[], io: CliIo, ctx: Ctx, call: Call): Promise
     const ci = (call.args = { project: need(p, "project"), env: need(p, "env"), branch: strFlag(p, "branch"), mobile: p.flags.get("mobile") === true ? true : p.flags.get("no-mobile") === true ? false : undefined });
     // La CLI la ejecuta una persona: puede escribir cualquier entorno (el MCP nunca escribe producción).
     outcome = cmd === "ci-check" ? await opsCiCheck(ctx, ci) : await opsCiGenerate(ctx, ci, { allowProduction: true });
-  } else if (cmd === "redeploy") {
+  } else if (cmd === "redeploy" || cmd === "scale") {
     call.phase = "result";
-    // Este subcomando cambia AWS: cualquier flag fuera de la lista es un error (nada se ignora en silencio, p. ej. --yes).
-    const allowed = new Set(["project", "env", "service", "all", "json"]);
-    for (const f of p.flags.keys()) if (!allowed.has(f)) throw new ShardevError("invalid_input", `Flag no admitida en ops redeploy: --${f}. No existe ninguna forma de omitir la confirmación.`);
-    if (p.positional.length > 1) throw new ShardevError("invalid_input", `Argumento no admitido en ops redeploy: ${p.positional[1]}`);
+    // Estos subcomandos cambian AWS: cualquier flag fuera de la lista es un error (nada se ignora en silencio, p. ej. --yes).
+    const allowed = new Set(["project", "env", "service", "all", "json", ...(cmd === "scale" ? ["desired-count"] : [])]);
+    for (const f of p.flags.keys()) if (!allowed.has(f)) throw new ShardevError("invalid_input", `Flag no admitida en ops ${cmd}: --${f}. No existe ninguna forma de omitir la confirmación.`);
+    if (p.positional.length > 1) throw new ShardevError("invalid_input", `Argumento no admitido en ops ${cmd}: ${p.positional[1]}`);
     if (p.flags.has("all") && p.flags.get("all") !== true) throw new ShardevError("invalid_input", "--all no admite valor");
-    const target = { project: need(p, "project"), env: need(p, "env"), service: strFlag(p, "service"), ...(p.flags.has("all") ? { all: true as const } : {}) };
+    let desired: number | undefined;
+    if (cmd === "scale") {
+      const raw = strFlag(p, "desired-count");
+      if (raw === undefined || !/^\d{1,3}$/.test(raw) || Number(raw) > MAX_DESIRED_COUNT) throw new ShardevError("invalid_input", `Falta --desired-count o no es un entero entre 0 y ${MAX_DESIRED_COUNT}`);
+      desired = Number(raw);
+    }
+    const target = { project: need(p, "project"), env: need(p, "env"), service: strFlag(p, "service"), ...(p.flags.has("all") ? { all: true as const } : {}), ...(desired !== undefined ? { desired_count: desired } : {}) };
     call.args = target;
-    outcome = await cliRedeploy(ctx, io, target, Date.now());
+    outcome = cmd === "scale" ? await cliScale(ctx, io, target, Date.now()) : await cliRedeploy(ctx, io, target, Date.now());
   } else if (cmd === "log-read") {
     const args = { ref: need(p, "ref"), grep: strFlag(p, "grep"), context: intFlag(p, "context"), offset: intFlag(p, "offset"), limit: intFlag(p, "limit") };
     call.args = args;
