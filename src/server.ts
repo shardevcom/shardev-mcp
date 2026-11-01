@@ -147,13 +147,14 @@ export function createServer(options: { paths?: Paths; runner?: Runner; template
     {
       ...common(PROJECT_PLAN),
       description:
-        "Planifica la creación de un proyecto NUEVO: devuelve archivos a crear, diffs de edits, comandos de verificación, conflictos y un plan_id (30 min). No escribe el proyecto. `target` debe quedar bajo una raíz de allowed_roots del dueño.",
+        "Planifica la creación de un proyecto NUEVO: devuelve archivos a crear (resumen por capa; `detail: full` para la lista completa), diffs de edits, comandos de verificación, conflictos y un plan_id (30 min). No escribe el proyecto. `target` debe quedar bajo una raíz de allowed_roots del dueño.",
       inputSchema: {
         spec: ProjectSpecInputSchema.describe("Spec del proyecto (name, domain, apps[], features[], mobile?)"),
         target: z.string().min(1).max(500).describe("Ruta absoluta del proyecto nuevo (ausente o vacía)"),
+        detail: z.enum(["summary", "full"]).optional().describe("summary (por defecto): archivos resumidos por capa; full: lista completa de archivos"),
       },
     },
-    wrap(ctx, PROJECT_PLAN, projectPlan as Handler<{ spec: unknown; target: string }>),
+    wrap(ctx, PROJECT_PLAN, projectPlan as Handler<{ spec: unknown; target: string; detail?: string }>),
   );
 
   server.registerTool(

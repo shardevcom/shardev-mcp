@@ -7,7 +7,7 @@ import { loadRegistry } from "../core/manifest.js";
 import { applyCreate } from "../gen/apply.js";
 import { LOCK_PATH, collectSteps } from "../gen/build.js";
 import { loadLayers, templateHash } from "../gen/layers.js";
-import { planCreate } from "../gen/plan.js";
+import { planCreate, type PlanResult } from "../gen/plan.js";
 import { safeRel } from "../gen/safe-path.js";
 import { resolveProjectSpec } from "../gen/spec.js";
 import { forbiddenFor, loadLeftoverTerms, verifyTree } from "../gen/verify.js";
@@ -15,13 +15,43 @@ import type { Ctx, ToolOutcome } from "./context.js";
 
 const rejected = (e: ShardevError, extra: Partial<ToolOutcome> = {}): ToolOutcome => ({ text: e.message, isError: true, decision: "rejected", ...extra });
 
-export async function projectPlan(ctx: Ctx, args: { spec: unknown; target: string }): Promise<ToolOutcome> {
+export type PlanDetail = "summary" | "full";
+
+/** Resumen por capa de `files_to_create` (cuántos archivos y bytes); conserva el orden de aparición de las capas. */
+export function summarizeFiles(files: PlanResult["files_to_create"]): { total_files: number; total_bytes: number; by_layer: Array<{ layer: string; files: number; bytes: number }> } {
+  const byLayer = new Map<string, { layer: string; files: number; bytes: number }>();
+  for (const f of files) {
+    const e = byLayer.get(f.layer) ?? { layer: f.layer, files: 0, bytes: 0 };
+    e.files++;
+    e.bytes += f.bytes;
+    byLayer.set(f.layer, e);
+  }
+  return { total_files: files.length, total_bytes: files.reduce((n, f) => n + f.bytes, 0), by_layer: [...byLayer.values()] };
+}
+
+/**
+ * Solo cambia la respuesta: el plan guardado, su HMAC y project_create no dependen de `detail`.
+ * `summary` (por defecto) sustituye `files_to_create` por `files_summary`; `full` devuelve la lista completa.
+ */
+export async function projectPlan(ctx: Ctx, args: { spec: unknown; target: string; detail?: unknown }): Promise<ToolOutcome> {
   try {
+    if (args.detail !== undefined && args.detail !== "summary" && args.detail !== "full") {
+      throw new ShardevError("invalid_input", "`detail` debe ser \"summary\" o \"full\".");
+    }
+    const detail: PlanDetail = args.detail === "full" ? "full" : "summary";
     const plan = await planCreate(ctx, args.spec, args.target);
     const note = plan.plan_id
       ? "Plan válido. Nada se creó todavía: aplica con project_create(plan_id) (vigente 30 min)."
       : "El plan tiene conflictos y NO se guardó (sin plan_id): corrígelos y vuelve a planear.";
-    return { text: JSON.stringify({ note, ...plan }, null, 2), isError: false, decision: "allowed" };
+    const body: Record<string, unknown> =
+      detail === "full"
+        ? { note, ...plan }
+        : {
+            note: `${note} Resumen por capa; usa detail="full" para la lista completa de archivos.`,
+            detail,
+            ...Object.fromEntries(Object.entries(plan).map(([k, v]) => (k === "files_to_create" ? ["files_summary", summarizeFiles(plan.files_to_create)] : [k, v]))),
+          };
+    return { text: JSON.stringify(body, null, 2), isError: false, decision: "allowed" };
   } catch (e) {
     if (e instanceof ShardevError) return rejected(e);
     throw e;
