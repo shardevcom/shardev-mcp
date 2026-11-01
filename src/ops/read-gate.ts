@@ -10,7 +10,7 @@ import {
   type Environment,
   type ResolvedProject,
 } from "../core/manifest.js";
-import { decide, loadPolicy } from "../core/policy.js";
+import { decide, loadPolicy, type PolicyDecision } from "../core/policy.js";
 import type { Ctx, ToolOutcome } from "./context.js";
 
 export interface ReadArgs {
@@ -61,29 +61,43 @@ export async function gateRead(ctx: Ctx, args: ReadArgs, capability: "ecs" | "lo
     throw e;
   }
 
+  const pg = await evaluatePolicy(ctx, resolved, env);
+  if (!pg.ok) return fail(pg.text, pg.decision);
+  // No se reenvían `decision.notes`: el de gated-apply dice "nada se ejecuta", falso para una lectura.
+  return {
+    ok: true,
+    project: resolved,
+    env,
+    services,
+    policyNote: { requested_mode: pg.decision.requestedMode, nota: NOTE },
+  };
+}
+
+export type PolicyGate =
+  | { ok: true; decision: Extract<PolicyDecision, { status: "allowed" }> }
+  | { ok: false; text: string; decision: "disabled" | "unavailable" | "rejected" };
+
+/**
+ * Política + identidad, compartido por lecturas (`gateRead`) y cambios (`gateChange`). Solo `allowed`
+ * pasa; disabled/unavailable/rejected se traducen a texto y decisión sin llamar a nada más.
+ */
+export async function evaluatePolicy(ctx: Ctx, resolved: ResolvedProject, env: Environment): Promise<PolicyGate> {
   let policy;
   try {
     policy = (await loadPolicy(ctx.paths)).policy;
   } catch (e) {
-    return fail(`Operación deshabilitada: ${e instanceof ShardevError ? e.message : "no se pudo leer policy.yaml."} Todo queda disabled hasta corregirlo.`, "disabled");
+    return { ok: false, decision: "disabled", text: `Operación deshabilitada: ${e instanceof ShardevError ? e.message : "no se pudo leer policy.yaml."} Todo queda disabled hasta corregirlo.` };
   }
   const decision = await decide(policy, resolved.manifest, env, () => getIdentity(env.aws_profile, env.region, { runner: ctx.runner, redactor: ctx.redactor }), resolved.productionEnvs);
   switch (decision.status) {
     case "disabled":
-      return fail(`Operación deshabilitada por la política: ${decision.reason}`, "disabled");
+      return { ok: false, decision: "disabled", text: `Operación deshabilitada por la política: ${decision.reason}` };
     case "unavailable":
-      return fail(decision.message, "unavailable");
+      return { ok: false, decision: "unavailable", text: decision.message };
     case "rejected":
-      return fail(decision.reason, "rejected");
+      return { ok: false, decision: "rejected", text: decision.reason };
     case "allowed":
-      // No se reenvían `decision.notes`: el de gated-apply dice "nada se ejecuta", falso para una lectura.
-      return {
-        ok: true,
-        project: resolved,
-        env,
-        services,
-        policyNote: { requested_mode: decision.requestedMode, nota: NOTE },
-      };
+      return { ok: true, decision };
   }
 }
 

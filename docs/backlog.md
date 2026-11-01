@@ -20,7 +20,6 @@ Requisito de todas las operaciones que modifican AWS.
 
 | ID | Tarea | Criterio de cierre | Esfuerzo |
 |---|---|---|---|
-| BASE-01 | Primera operación T3 real con `requiresUserInteraction` y `commandOnlyResponse` | La herramienta devuelve un comando `shardev` sin ejecutar nada | Medio |
 | BASE-03 | Implementar `gated-apply` | Plan firmado, confirmación por llamada, auditoría y modo más restrictivo garantizado | Alto |
 | BASE-04 | Modo de proyecto adoptado | Un proyecto existente declara sus pasos de verificación, sin lock falso, y `app_create` sigue bloqueado | Medio |
 
@@ -61,7 +60,7 @@ Requisito de todas las operaciones que modifican AWS.
 ## Orden recomendado
 
 1. ADJ-02.
-2. BASE-01 y SVC-01 como primera operación que cambia AWS; luego SVC-02.
+2. SVC-01 como primera operación que cambia AWS; luego SVC-02.
 3. Resto de ENV y CI, LOC y REL.
 4. SEC, DEP y TPL-01.
 5. RUN, DEL, MOB, MAIL y UI según necesidad.

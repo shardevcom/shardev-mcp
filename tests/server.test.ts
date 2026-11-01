@@ -32,8 +32,9 @@ describe("servidor MCP", () => {
   test("expone ops_status/log_read (solo lectura) y project_* (T2: no solo lectura, no destructivas, sin AWS)", async () => {
     const { client } = await connect();
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["app_create", "app_plan", "log_read", "ops_ci_check", "ops_ci_generate", "ops_env_check", "ops_logs", "ops_services", "ops_status", "ops_tasks", "project_create", "project_plan", "project_verify"]);
-    for (const t of tools) {
+    expect(tools.map((t) => t.name).sort()).toEqual(["app_create", "app_plan", "log_read", "ops_ci_check", "ops_ci_generate", "ops_env_check", "ops_logs", "ops_redeploy", "ops_services", "ops_status", "ops_tasks", "project_create", "project_plan", "project_verify"]);
+    expect(tools.find((t) => t.name === "ops_redeploy")!.annotations).toMatchObject({ destructiveHint: true }); // T3, ver redeploy.test.ts
+    for (const t of tools.filter((x) => x.name !== "ops_redeploy")) {
       const t2 = t.name.startsWith("project_") || t.name.startsWith("app_") || t.name === "ops_ci_generate";
       expect(t.annotations?.readOnlyHint).toBe(!t2);
       expect(t.annotations?.destructiveHint).toBe(false);
@@ -181,14 +182,15 @@ describe("catálogo", () => {
     expect(effectiveTier("T2", { name: "live", is_production: false }, ["live"])).toBe("T3");
     expect(effectiveTier("T1", { is_production: true })).toBe("T1");
   });
-  test("las únicas operaciones que cambian estado son project_* y app_* (T2, sin AWS); ninguna T3; las lecturas AWS son T1", () => {
+  test("las operaciones T2 son project_* y app_* (sin AWS) y ops_ci_generate; la única T3 es ops_redeploy (solo devuelve el comando); las lecturas AWS son T1", () => {
     for (const n of ["ops_services", "ops_tasks", "ops_logs"]) expect(listOperations().find((o) => o.name === n)).toMatchObject({ tier: "T1", usesAws: true });
     expect(listOperations().find((o) => o.name === "ops_env_check")).toMatchObject({ tier: "T0", usesAws: false });
     expect(listOperations().find((o) => o.name === "ops_ci_check")).toMatchObject({ tier: "T0", usesAws: false });
     expect(listOperations().find((o) => o.name === "ops_ci_generate")).toMatchObject({ tier: "T2", usesAws: false });
     const changing = listOperations().filter((o) => o.tier === "T2" || o.tier === "T3");
-    expect(changing.map((o) => o.name).sort()).toEqual(["app_create", "app_plan", "ops_ci_generate", "project_create", "project_plan", "project_verify"]);
-    expect(changing.every((o) => o.tier === "T2" && !o.usesAws)).toBe(true);
+    expect(changing.map((o) => o.name).sort()).toEqual(["app_create", "app_plan", "ops_ci_generate", "ops_redeploy", "project_create", "project_plan", "project_verify"]);
+    expect(changing.filter((o) => o.name !== "ops_redeploy").every((o) => o.tier === "T2" && !o.usesAws)).toBe(true);
+    expect(listOperations().find((o) => o.name === "ops_redeploy")).toMatchObject({ tier: "T3", usesAws: true });
   });
 });
 

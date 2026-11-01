@@ -115,6 +115,14 @@ export const OPS_CI_GENERATE = register({
   usesAws: false,
 });
 
+// Primera operación T3: el MCP solo devuelve el comando; ver docs/decisions/0010-operaciones-t3.md.
+export const OPS_REDEPLOY = register({
+  name: "ops_redeploy",
+  tier: "T3",
+  summary: "Redespliegue forzado de servicios ECS declarados. El MCP nunca lo ejecuta: devuelve el comando `shardev ops redeploy` para que lo ejecute una persona.",
+  usesAws: true,
+});
+
 // Fase 3: generador (cambian solo el sistema de archivos local; nunca AWS).
 export const PROJECT_PLAN = register({
   name: "project_plan",
