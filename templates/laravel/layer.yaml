@@ -5,3 +5,5 @@ requires: [project.name, project.primary_app, project.primary_provider, project.
 files:
   - { tree: files, dest: ., render: [composer.json, config/auth.php, config/authentications.php, config/passport.php, routes/web.php] }
   - { src: bin/artisan, dest: artisan, raw: true, mode: "0755" }
+  # npm omite este .gitignore del tarball: se guarda con otro nombre y se restaura al generar.
+  - { src: dotfiles/storage-framework.gitignore, dest: storage/framework/.gitignore, raw: true }
