@@ -13,6 +13,10 @@ const NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 /** Nombre de servicio ECS: letras, dígitos, guiones y guiones bajos (máx. 255). */
 const ECS_SERVICE_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/;
 
+/** Prefijo de grupo de logs de CloudWatch: solo los caracteres válidos de un nombre de grupo (sin espacios ni control), sin `..`. */
+const LOG_GROUP_PREFIX_RE = /^[A-Za-z0-9_./#-]{1,200}$/;
+export const DEFAULT_LOG_GROUP_PREFIX = "/ecs/";
+
 export const EnvironmentSchema = z
   .object({
     name: z.string().regex(NAME_RE),
@@ -28,6 +32,12 @@ export const EnvironmentSchema = z
      * `service_prefix` solo no separa entornos (el prefijo de producción también cubre los de staging).
      */
     services: z.array(z.string().regex(ECS_SERVICE_RE, "nombre de servicio ECS inválido")).min(1).optional(),
+    /** Prefijo del grupo de logs; el grupo es `<log_group_prefix><servicio>`. Por defecto `/ecs/`. */
+    log_group_prefix: z
+      .string()
+      .regex(LOG_GROUP_PREFIX_RE, "log_group_prefix inválido: use letras, dígitos y _ . / # - (1-200 caracteres)")
+      .refine((v) => !v.includes(".."), "log_group_prefix no puede contener '..'")
+      .optional(),
   })
   .strict();
 export type Environment = z.infer<typeof EnvironmentSchema>;

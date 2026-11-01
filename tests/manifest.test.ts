@@ -53,6 +53,15 @@ describe("manifest", () => {
     expect(() => declaredServices(manifest, requireEnvironment(manifest, "prod"))).toThrowError(/services: \[demo-app\]/);
   });
 
+  test("log_group_prefix: opcional, válidos aceptados y inválidos rechazados al parsear", () => {
+    const withPrefix = (v: string): string => OPS_YAML().replace("    cluster: shared\n  - name: prod", `    cluster: shared\n    log_group_prefix: ${v}\n  - name: prod`);
+    expect(parseManifest(OPS_YAML()).environments[0]!.log_group_prefix).toBeUndefined();
+    for (const ok of ["/ecs/", "/demo/staging/", "demo_logs-1.x#/"]) expect(parseManifest(withPrefix(JSON.stringify(ok))).environments[0]!.log_group_prefix).toBe(ok);
+    for (const bad of ['""', '"/ecs /"', '"/ecs/\\n"', '"/ecs/\\u0007"', '"/ecs/*"', '"/ecs/../x/"', '"/ecs/%s"', `"${"a".repeat(201)}"`, "5"]) {
+      expect(() => parseManifest(withPrefix(bad)), bad).toThrowError(/log_group_prefix|inválido/);
+    }
+  });
+
   test("validación de `services` en el manifest", () => {
     const withSvc = (list: string): string => OPS_YAML().replace("    cluster: shared\n  - name: prod", `    cluster: shared\n    services: ${list}\n  - name: prod`);
     expect(() => parseManifest(withSvc("[]"))).toThrowError(/services/);

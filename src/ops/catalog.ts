@@ -89,7 +89,7 @@ export const OPS_TASKS = register({
 export const OPS_LOGS = register({
   name: "ops_logs",
   tier: "T1",
-  summary: "Busca eventos en /ecs/<servicio> (filter-log-events); guarda el contenido redactado y devuelve solo resumen y log_ref.",
+  summary: "Busca eventos en <log_group_prefix><servicio> (por defecto /ecs/<servicio>; filter-log-events); guarda el contenido redactado y devuelve solo resumen y log_ref.",
   usesAws: true,
 });
 

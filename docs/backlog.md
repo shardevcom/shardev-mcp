@@ -6,7 +6,7 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 
 ## Ya disponible
 
-`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs`, `shardev ops status|services|tasks|logs|log-read`, `project_*` y `app_*`.
+`ops_status`, `log_read`, `ops_services`, `ops_tasks`, `ops_logs` (grupo de logs configurable por entorno con `log_group_prefix`), `shardev ops status|services|tasks|logs|log-read`, `project_*` y `app_*`.
 
 ## 1. Ajustes a lo existente
 
@@ -14,7 +14,6 @@ Niveles: T0 lectura local, T1 lectura AWS, T2 cambio local o fuera de producció
 |---|---|---|---|
 | ADJ-01 | Probar las herramientas `ops_*` a través del protocolo MCP con AWS real | Hasta ahora solo se probaron por CLI; el protocolo solo tiene tests | Bajo |
 | ADJ-02 | Probar `log_read` sobre logs reales y medir la redacción | Solo se probó con datos simulados | Bajo |
-| ADJ-04 | Hacer configurable el grupo de logs por entorno | `/ecs/<servicio>` es una convención fija | Bajo |
 | ADJ-05 | Evaluar enmascarar datos personales en logs guardados | La redacción solo cubre secretos | Medio |
 | ADJ-06 | Purgar las copias de `ops_logs` sin depender de una nueva llamada | Sin nuevas llamadas, las copias vencidas no se borran | Bajo |
 | ADJ-07 | Comprobar que `spec.mobile` no genera nada y rechazarlo hasta que exista la capa | No hay plantillas de scope `mobile` | Bajo |
